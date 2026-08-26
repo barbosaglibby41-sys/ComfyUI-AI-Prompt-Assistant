@@ -173,6 +173,7 @@ function persistChatSession(chat) {
 
 const state = {
     open: true,
+    chatExpanded: false,
     view: "main",
     tab: "chat",
     mapping: {
@@ -815,9 +816,10 @@ function buildPanel() {
     const header = el("header", { className: "aipa-header" });
     const title = el("div", { className: "aipa-title" }, [el("span", { className: "aipa-mark", textContent: "AI" }), el("div", {}, [el("strong", { textContent: "Prompt Assistant" }), el("small", { textContent: "创作工作台" })])]);
     const newChatButton = el("button", { className: "aipa-icon-button aipa-new-chat-button", type: "button", textContent: "新对话", title: "开始新对话并清除本机保存的聊天记录", ariaLabel: "开始新对话" });
+    const chatExpandButton = el("button", { className: "aipa-icon-button aipa-chat-expand-button", type: "button", textContent: "展开聊天", title: "进入完整聊天工作台", ariaLabel: "进入完整聊天工作台" });
     const settingsButton = el("button", { className: "aipa-icon-button aipa-settings-button", type: "button", textContent: "设置", title: "打开 API 设置", ariaLabel: "打开 API 设置" });
     const minimize = el("button", { className: "aipa-icon-button", type: "button", textContent: "−", title: "收起窗口", ariaLabel: "收起窗口" });
-    const headerActions = el("div", { className: "aipa-header-actions" }, [newChatButton, settingsButton, minimize]);
+    const headerActions = el("div", { className: "aipa-header-actions" }, [newChatButton, chatExpandButton, settingsButton, minimize]);
     header.append(title, headerActions);
     const tabs = el("div", { className: "aipa-tabs", role: "tablist" });
     const chatTab = el("button", { className: "aipa-tab", type: "button", textContent: "AI 对话", role: "tab", ariaLabel: "打开 AI 对话" });
@@ -1147,6 +1149,10 @@ function buildPanel() {
         plannerTab.ariaSelected = String(state.tab === "planner");
         reviewerTab.ariaSelected = String(state.tab === "reviewer");
         root.classList.toggle("is-collapsed", !state.open);
+        root.classList.toggle("is-chat-expanded", state.chatExpanded && state.view === "main" && state.tab === "chat");
+        chatExpandButton.textContent = state.chatExpanded ? "收起聊天" : "展开聊天";
+        chatExpandButton.title = state.chatExpanded ? "返回悬浮窗" : "进入完整聊天工作台";
+        chatExpandButton.ariaLabel = state.chatExpanded ? "返回悬浮窗" : "进入完整聊天工作台";
         launcher.classList.toggle("is-visible", !state.open);
         reportHost.replaceChildren(makeReport(state.lastReview));
         statusHost.textContent = state.status.text;
@@ -1226,6 +1232,13 @@ function buildPanel() {
         try { window.localStorage.removeItem(CHAT_SESSION_STORAGE_KEY); } catch {}
         state.tab = "chat";
         setStatus("success", "已开始新对话。当前工作流不会被改动。" );
+        update();
+    };
+    chatExpandButton.onclick = () => {
+        state.chatExpanded = !state.chatExpanded;
+        state.view = "main";
+        state.tab = "chat";
+        setStatus("success", state.chatExpanded ? "已进入完整聊天工作台。" : "已返回悬浮窗。" );
         update();
     };
     minimize.onclick = () => { state.open = false; update(); };

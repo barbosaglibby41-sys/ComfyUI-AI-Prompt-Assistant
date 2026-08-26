@@ -69,6 +69,7 @@
 .aipa-mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 6px; background: var(--aipa-accent); color: var(--aipa-accent-ink); font: 700 11px "JetBrains Mono", monospace; }
 .aipa-header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .aipa-icon-button.aipa-new-chat-button { width: 48px; padding: 0; font-size: 11px; white-space: nowrap; }
+.aipa-icon-button.aipa-chat-expand-button { width: 64px; padding: 0; font-size: 11px; white-space: nowrap; }
 .aipa-icon-button.aipa-settings-button { width: 42px; padding: 0; font-size: 11px; white-space: nowrap; }
 .aipa-icon-button { width: 32px; height: 32px; color: var(--aipa-muted); background: transparent; border: 1px solid transparent; border-radius: 5px; font-size: 20px; cursor: pointer; }
 .aipa-icon-button:hover, .aipa-icon-button:focus-visible { color: var(--aipa-text); border-color: var(--aipa-line); outline: none; }
@@ -200,6 +201,55 @@
 .aipa-score-fill { display: block; height: 100%; border-radius: inherit; transition: width 180ms ease-out; }
 .aipa-score-number { color: var(--aipa-muted); font: 11px "JetBrains Mono", monospace; text-align: right; }
 
+/* Focus mode gives the conversation the same breathing room as a dedicated agent workspace. */
+.aipa-panel.is-chat-expanded {
+    top: 12px;
+    right: 12px;
+    width: min(760px, calc(100vw - 24px));
+    height: calc(100vh - 24px);
+    max-height: none;
+}
+.aipa-panel.is-chat-expanded .aipa-tabs { display: none; }
+.aipa-panel.is-chat-expanded .aipa-body { display: flex; height: calc(100% - 58px); max-height: none; flex-direction: column; overflow: hidden; }
+.aipa-panel.is-chat-expanded .aipa-operation-status { flex: 0 0 auto; }
+.aipa-panel.is-chat-expanded .aipa-chat-view {
+    display: flex;
+    min-height: 0;
+    height: auto;
+    flex: 1 1 auto;
+    box-sizing: border-box;
+    flex-direction: column;
+    padding: 24px clamp(20px, 5vw, 56px) 20px;
+}
+.aipa-panel.is-chat-expanded .aipa-chat-intro { flex: 0 0 auto; margin-bottom: 16px; padding: 13px 15px; }
+.aipa-panel.is-chat-expanded .aipa-chat-intro strong { font-size: 15px; }
+.aipa-panel.is-chat-expanded .aipa-chat-intro p { font-size: 12px; }
+.aipa-panel.is-chat-expanded .aipa-chat-messages {
+    flex: 1 1 auto;
+    min-height: 120px;
+    max-height: none;
+    margin-bottom: 14px;
+    padding-right: 8px;
+    gap: 14px;
+}
+.aipa-panel.is-chat-expanded .aipa-chat-message { max-width: min(88%, 620px); padding: 13px 15px; border-radius: 8px; }
+.aipa-panel.is-chat-expanded .aipa-chat-message p { font-size: 14px; line-height: 1.65; }
+.aipa-panel.is-chat-expanded .aipa-chat-speaker { margin-bottom: 6px; font-size: 11px; }
+.aipa-panel.is-chat-expanded .aipa-chat-suggestions { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 14px; }
+.aipa-panel.is-chat-expanded .aipa-suggestion { min-height: 38px; font-size: 12px; }
+.aipa-panel.is-chat-expanded .aipa-chat-view > .aipa-field { flex: 0 0 auto; margin-bottom: 8px; }
+.aipa-panel.is-chat-expanded .aipa-chat-view > .aipa-field .aipa-label { font-size: 11px; }
+.aipa-panel.is-chat-expanded .aipa-chat-view > .aipa-field textarea { min-height: 76px; max-height: 180px; padding: 12px 13px; font-size: 14px; line-height: 1.5; }
+.aipa-panel.is-chat-expanded .aipa-chat-actions { flex: 0 0 auto; justify-content: flex-end; margin-top: 0; }
+.aipa-panel.is-chat-expanded .aipa-chat-actions .aipa-primary { flex: 0 0 116px; }
+.aipa-panel.is-chat-expanded .aipa-chat-plan-actions { flex: 0 0 auto; margin-top: 8px; }
+
+@media (max-width: 600px) {
+    .aipa-panel.is-chat-expanded { top: 8px; right: 8px; width: calc(100vw - 16px); height: calc(100vh - 16px); }
+    .aipa-panel.is-chat-expanded .aipa-chat-view { padding: 16px 12px 12px; }
+    .aipa-panel.is-chat-expanded .aipa-chat-message { max-width: 94%; }
+}
+
 @media (max-width: 600px) {
     .aipa-panel { top: 12px; right: 12px; width: calc(100vw - 24px); max-height: calc(100vh - 24px); }
     .aipa-body { max-height: calc(100vh - 82px); }
@@ -216,6 +266,7 @@
     .aipa-title small { display: none; }
     .aipa-header-actions { gap: 4px; }
     .aipa-icon-button.aipa-new-chat-button { width: 42px; font-size: 10px; }
+    .aipa-icon-button.aipa-chat-expand-button { width: 52px; font-size: 10px; }
     .aipa-icon-button.aipa-settings-button { width: 38px; font-size: 10px; }
 }
 

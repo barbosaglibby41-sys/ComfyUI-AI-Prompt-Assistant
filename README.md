@@ -65,6 +65,8 @@ When image review is enabled, the reviewer returns an overall score out of 100, 
 
 对话记录与已确认的简短记忆保存在当前浏览器的 ComfyUI 页面本地，刷新页面后可以继续聊天。右上角的 `新对话` 会清除这台浏览器中的该会话记录，不会改动画布、工作流或 API 配置。
 
+点击标题栏的 `展开聊天` 可以进入完整聊天工作台：对话区会扩大并持续滚动，输入框固定在底部，适合长时间连续讨论；点击同一位置的 `收起聊天` 可返回悬浮窗。聊天工作台不会改变节点画布的布局。
+
 ## Workflow
 
 The floating panel is the recommended entry point. It does not require searching the node menu first:
