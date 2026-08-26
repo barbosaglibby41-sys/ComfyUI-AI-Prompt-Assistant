@@ -309,8 +309,11 @@ function widget(node, name) {
 function setWidget(node, name, value) {
     const item = widget(node, name);
     if (!item) return false;
+    const previousValue = item.value;
+    if (previousValue === value) return true;
     item.value = value;
     item.callback?.(value);
+    node?.onWidgetChanged?.(name, value, previousValue, item);
     node?.graph?.setDirtyCanvas(true, true);
     return true;
 }
@@ -609,14 +612,30 @@ function outputValue(output, name) {
     return Array.isArray(value) ? value[0] : value;
 }
 
+function outputObject(value) {
+    const first = Array.isArray(value) ? value[0] : value;
+    if (!first || typeof first === "object") return first || null;
+    if (typeof first !== "string") return null;
+    try {
+        const parsed = JSON.parse(first);
+        return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+        return null;
+    }
+}
+
 function normalizedNodeOutput(output) {
+    const syncOutput = outputObject(output?.ai_prompt_sync)
+        || outputObject(output?.prompt_sync)
+        || outputObject(output?.ui?.ai_prompt_sync)
+        || outputObject(output?.ui?.prompt_sync);
     const result = output?.result;
     const tuple = Array.isArray(result?.[0]) ? result[0] : (Array.isArray(result) ? result : []);
     const aliases = [
         "positive_prompt", "negative_prompt", "sampler_name", "scheduler",
         "steps", "cfg", "width", "height", "denoise", "seed", "reasoning",
     ];
-    const normalized = { ...(output || {}) };
+    const normalized = { ...(output || {}), ...(syncOutput || {}) };
     for (const [index, name] of aliases.entries()) {
         if (normalized[name] === undefined && tuple[index] !== undefined) normalized[name] = tuple[index];
     }
@@ -627,7 +646,7 @@ function applyAiOutputToWorkflow(output) {
     output = normalizedNodeOutput(output);
     let applied = 0;
     const positive = outputValue(output, "positive_prompt");
-    if (typeof positive === "string" && positive.trim() && setWidget(mappingNode("positive"), "text", positive)) applied += 1;
+    if (typeof positive === "string" && positive.trim() && setWidget(mappingNode("positive"), "text", positive.trim())) applied += 1;
     if (state.settings.allowParameterTuning === false) return applied;
     const sampler = mappingNode("sampler");
     const latent = mappingNode("latent");
@@ -1832,16 +1851,17 @@ app.registerExtension({
                 const nodeId = String(detail?.node ?? detail?.node_id ?? "");
                 const isPlanner = nodeId === String(state.mapping.planner);
                 const isReviewer = nodeId === String(state.mapping.reviewer);
-                if (isPlanner && state.pendingPlannerApply) {
+                if (isPlanner || isReviewer) {
                     state.pendingPlannerApply = false;
-                    const applied = applyAiOutputToWorkflow(detail?.output);
-                    ui.setStatus("success", applied ? `提示词规划完成，已写入 ${applied} 项工作流设置。` : "提示词规划完成，请在工作流映射中选择要写入的节点。");
-                } else if (isReviewer && state.pendingReviewerApply) {
                     state.pendingReviewerApply = false;
                     const applied = applyAiOutputToWorkflow(detail?.output);
-                    ui.setStatus("success", applied ? `图片评审完成，已写入 ${applied} 项工作流设置，可重新生成。` : "图片评审完成，请在工作流映射中选择要写入的节点。");
-                } else if (isPlanner || isReviewer) {
-                    ui.setStatus("success", "AI 调用完成，结果已写入节点输出。");
+                    const action = isPlanner ? "提示词规划" : "图片评审";
+                    ui.setStatus(
+                        "success",
+                        applied
+                            ? `${action}完成，正向提示词已实时写入工作流${applied > 1 ? `，另更新 ${applied - 1} 项出图设置。` : "。"}`
+                            : `${action}完成，但未找到可写入的正向提示词节点。请在工作流节点映射中选择正向 CLIP Text Encode 节点。`,
+                    );
                 }
                 if (!detail?.output?.ai_review?.length) return;
                 try {

@@ -575,6 +575,21 @@ def result_tuple(result, seed, fallback, allow_parameter_tuning=True, negative_o
     )
 
 
+def prompt_sync_report(output):
+    """Expose AI results to the web extension after a node has executed.
+
+    ComfyUI's ``executed`` browser event includes only a node's ``ui`` payload,
+    not its normal return sockets. Keeping this payload small and explicit lets
+    the extension update the mapped positive prompt widget immediately without
+    changing the workflow's output contract.
+    """
+    names = (
+        "positive_prompt", "negative_prompt", "sampler_name", "scheduler",
+        "steps", "cfg", "width", "height", "denoise", "seed", "reasoning",
+    )
+    return json.dumps(dict(zip(names, output)), ensure_ascii=False)
+
+
 def normalize_review_score(value):
     try:
         return max(0, min(100, round(float(value))))
@@ -656,7 +671,8 @@ class AIPromptPlanner:
             {"role": "system", "content": planner_instruction(prompt_format, config["allow_parameter_tuning"])},
             {"role": "user", "content": f"Image model: {image_model}\nPrompt format: {prompt_format}\nCreative brief: {creative_brief}\nConstraints: {style_or_constraints}"},
         ])
-        return result_tuple(result, seed, fallback, config["allow_parameter_tuning"], negative_prompt)
+        output = result_tuple(result, seed, fallback, config["allow_parameter_tuning"], negative_prompt)
+        return {"result": output, "ui": {"ai_prompt_sync": [prompt_sync_report(output)]}}
 
 
 class AIImageReviewer:
@@ -706,7 +722,14 @@ class AIImageReviewer:
                 "reasoning": "Image review is disabled.",
                 "summary": "Image review is disabled.",
             }
-            return {"result": result_tuple(result, seed, fallback), "ui": {"ai_review": [review_report(result, fallback, False, prompt_format)]}}
+            output = result_tuple(result, seed, fallback)
+            return {
+                "result": output,
+                "ui": {
+                    "ai_prompt_sync": [prompt_sync_report(output)],
+                    "ai_review": [review_report(result, fallback, False, prompt_format)],
+                },
+            }
         instruction = planner_instruction(prompt_format, config["allow_parameter_tuning"]).replace(
             "Convert the user's Chinese or English creative brief into practical image-generation prompts.",
             "Review the connected generated image and revise its prompts and sampling settings. Preserve the current result where the user's revision request says to preserve it."
@@ -735,9 +758,13 @@ Use the same standards across all scores. Do not invent defects that are not vis
             ]},
         ], request_label="图片评审请求", timeout_multiplier=2)
         parameters = sanitize_parameters(result.get("parameters"), fallback) if config["allow_parameter_tuning"] else fallback
+        output = result_tuple(result, seed, fallback, config["allow_parameter_tuning"], current_negative_prompt)
         return {
-            "result": result_tuple(result, seed, fallback, config["allow_parameter_tuning"], current_negative_prompt),
-            "ui": {"ai_review": [review_report(result, parameters, True, prompt_format)]},
+            "result": output,
+            "ui": {
+                "ai_prompt_sync": [prompt_sync_report(output)],
+                "ai_review": [review_report(result, parameters, True, prompt_format)],
+            },
         }
 
 
