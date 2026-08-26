@@ -292,10 +292,14 @@ def register_api_routes():
             if not isinstance(values, dict):
                 raise ValueError("Chat payload must be an object.")
             message = str(values.get("message", "")).strip()
-            if not message:
+            image_data_url = str(values.get("image_data_url", "")).strip()
+            reverse_prompt = bool(values.get("reverse_prompt", False))
+            if not message and not image_data_url:
                 raise ValueError("请先输入想法或让 AI 帮你构思。")
             if len(message) > 4000:
                 raise ValueError("单条消息不能超过 4000 个字符。")
+            if image_data_url and (not image_data_url.startswith("data:image/") or len(image_data_url) > 12_000_000):
+                raise ValueError("图片格式不受支持，或图片过大（请使用 12 MB 以内的常见图片）。")
             history = sanitize_chat_history(values.get("history", []))
             session_memory = str(values.get("session_memory", "")).strip()[:1600]
             workflow_context = str(values.get("workflow_context", "")).strip()[:4000]
@@ -305,7 +309,16 @@ def register_api_routes():
             if workflow_context:
                 messages.append({"role": "system", "content": f"当前 ComfyUI 工作流状态（只读）：\n{workflow_context}"})
             messages.extend(history)
-            messages.append({"role": "user", "content": message})
+            user_text = message or ("请分析这张图片并反推可用于生图的提示词。" if reverse_prompt else "请分析这张图片并给出创作建议。")
+            if reverse_prompt:
+                messages.append({"role": "system", "content": "用户上传了参考图。请根据可见内容反推详细的生图提示词，包含主体、构图、镜头、光线、色彩、材质和风格；不要声称知道图片来源，也不要修改用户的固定反向提示词。"})
+            if image_data_url:
+                messages.append({"role": "user", "content": [
+                    {"type": "text", "text": user_text},
+                    {"type": "image_url", "image_url": {"url": image_data_url}},
+                ]})
+            else:
+                messages.append({"role": "user", "content": user_text})
             result = call_ai(
                 messages,
                 request_label="AI 对话请求",

@@ -129,52 +129,89 @@ const MAPPING_ROLES = [
 const CHAT_SESSION_STORAGE_KEY = "aipa.agent-session.v1";
 const INITIAL_AGENT_MESSAGE = "我是你的创作 Agent。可以持续和我讨论灵感、角色、构图与修改方向；确定方案后，我会把它交给当前工作流。";
 
-function newChatSession() {
+function chatSessionId() {
+    if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+    return `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function newChatSession(title = "新对话") {
     return {
+        id: chatSessionId(),
+        title,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
         sending: false,
         abortController: null,
         activeRequestId: 0,
         nextRequestId: 0,
+        attachment: null,
         memory: "",
         messages: [{ role: "assistant", content: INITIAL_AGENT_MESSAGE }],
         lastPlan: null,
     };
 }
 
-function restoreChatSession() {
+function restoreChatSessions() {
     try {
         const saved = JSON.parse(window.localStorage.getItem(CHAT_SESSION_STORAGE_KEY) || "null");
-        if (!saved || !Array.isArray(saved.messages)) return newChatSession();
-        const messages = saved.messages.slice(-60).map((message) => ({
-            role: message?.role === "user" ? "user" : "assistant",
-            content: String(message?.content || "").slice(0, 4000),
-            plan: message?.plan && typeof message.plan === "object" ? message.plan : null,
-        })).filter((message) => message.content);
-        if (!messages.length) return newChatSession();
-        return {
-            sending: false,
-            abortController: null,
-            activeRequestId: 0,
-            nextRequestId: 0,
-            memory: String(saved.memory || "").slice(0, 1600),
-            messages,
-            lastPlan: saved.lastPlan && typeof saved.lastPlan === "object" ? saved.lastPlan : null,
-        };
+        const rawSessions = Array.isArray(saved?.sessions)
+            ? saved.sessions
+            : (saved && Array.isArray(saved.messages) ? [{ ...saved, title: "历史对话" }] : []);
+        const sessions = rawSessions.map((raw, index) => {
+            const messages = (Array.isArray(raw?.messages) ? raw.messages : []).slice(-60).map((message) => ({
+                role: message?.role === "user" ? "user" : "assistant",
+                content: String(message?.content || "").slice(0, 4000),
+                attachmentName: String(message?.attachmentName || "").slice(0, 120),
+                plan: message?.plan && typeof message.plan === "object" ? message.plan : null,
+            })).filter((message) => message.content);
+            const fallback = newChatSession(index === 0 ? "历史对话" : "新对话");
+            return {
+                ...fallback,
+                id: String(raw?.id || fallback.id),
+                title: String(raw?.title || (index === 0 ? "历史对话" : "新对话")).slice(0, 60),
+                createdAt: Number(raw?.createdAt) || fallback.createdAt,
+                updatedAt: Number(raw?.updatedAt) || fallback.updatedAt,
+                memory: String(raw?.memory || "").slice(0, 1600),
+                messages: messages.length ? messages : fallback.messages,
+                lastPlan: raw?.lastPlan && typeof raw.lastPlan === "object" ? raw.lastPlan : null,
+            };
+        });
+        const safeSessions = sessions.length ? sessions : [newChatSession()];
+        const activeId = safeSessions.some((session) => session.id === saved?.activeId) ? saved.activeId : safeSessions[0].id;
+        return { sessions: safeSessions, activeId };
     } catch {
-        return newChatSession();
+        const session = newChatSession();
+        return { sessions: [session], activeId: session.id };
     }
 }
 
-function persistChatSession(chat) {
+const INITIAL_CHAT_STATE = restoreChatSessions();
+
+function persistChatSessions(sessions, activeId) {
     try {
         window.localStorage.setItem(CHAT_SESSION_STORAGE_KEY, JSON.stringify({
-            memory: String(chat.memory || "").slice(0, 1600),
-            messages: chat.messages.slice(-60),
-            lastPlan: chat.lastPlan,
+            version: 2,
+            activeId,
+            sessions: sessions.map((chat) => ({
+                id: chat.id,
+                title: String(chat.title || "新对话").slice(0, 60),
+                createdAt: chat.createdAt,
+                updatedAt: chat.updatedAt,
+                memory: String(chat.memory || "").slice(0, 1600),
+                messages: chat.messages.slice(-60),
+                lastPlan: chat.lastPlan,
+            })),
         }));
     } catch {
         // The agent remains usable when browser storage is unavailable.
     }
+}
+
+function persistChatSession(chat = state.chat) {
+    if (!chat) return;
+    const sessions = Array.isArray(state.chatSessions) ? state.chatSessions : [chat];
+    if (!sessions.some((item) => item.id === chat.id)) sessions.unshift(chat);
+    persistChatSessions(sessions, state.activeChatId || chat.id);
 }
 
 const state = {
@@ -214,7 +251,9 @@ const state = {
     generation: {
         signature: "",
     },
-    chat: restoreChatSession(),
+    chatSessions: INITIAL_CHAT_STATE.sessions,
+    activeChatId: INITIAL_CHAT_STATE.activeId,
+    chat: INITIAL_CHAT_STATE.sessions.find((session) => session.id === INITIAL_CHAT_STATE.activeId) || INITIAL_CHAT_STATE.sessions[0],
 };
 
 function currentGraph() {
@@ -835,9 +874,18 @@ function buildPanel() {
     const body = el("div", { className: "aipa-body" });
 
     const chat = el("div", { className: "aipa-view aipa-chat-view" });
+    const chatWorkspace = el("div", { className: "aipa-chat-workspace" });
+    const chatSessions = el("aside", { className: "aipa-chat-sessions", ariaLabel: "对话记录" });
+    const chatSessionHeader = el("div", { className: "aipa-chat-sessions-header" }, [el("strong", { textContent: "对话记录" })]);
+    const chatSessionList = el("div", { className: "aipa-chat-session-list" });
+    chatSessions.append(chatSessionHeader, chatSessionList);
     const chatMessages = el("div", { className: "aipa-chat-messages", role: "log", ariaLive: "polite", ariaLabel: "与 AI 的对话" });
     const chatSuggestions = el("div", { className: "aipa-chat-suggestions", ariaLabel: "灵感建议" });
     const chatInput = el("textarea", { rows: 2, placeholder: "例如：我没有想法，帮我设计一张有故事感的二次元壁纸", ariaLabel: "输入想法或出图需求" });
+    const chatAttachment = el("input", { type: "file", accept: "image/png,image/jpeg,image/webp,image/gif", className: "aipa-image-input", ariaLabel: "上传参考图片" });
+    const chatAttachmentButton = el("button", { className: "aipa-secondary aipa-attachment-button", type: "button", textContent: "上传图片", ariaLabel: "上传参考图片" });
+    const chatReversePrompt = el("button", { className: "aipa-secondary aipa-reverse-button", type: "button", textContent: "反推提示词", ariaLabel: "根据上传图片反推提示词" });
+    const chatAttachmentName = el("span", { className: "aipa-attachment-name", role: "status", ariaLive: "polite" });
     const chatSend = el("button", { className: "aipa-primary", type: "button", textContent: "发送给 AI", ariaLabel: "发送消息给 AI" });
     const chatWritePlan = el("button", { className: "aipa-secondary", type: "button", textContent: "写入创作需求", ariaLabel: "将 AI 方案写入创作需求" });
     const chatGenerate = el("button", { className: "aipa-primary", type: "button", textContent: "交给工作流生成", ariaLabel: "使用 AI 方案生成提示词并排队" });
@@ -847,14 +895,19 @@ function buildPanel() {
         suggestion.onclick = () => { chatInput.value = prompt; chatInput.focus(); update(); };
         chatSuggestions.append(suggestion);
     }
-    chat.append(
+    const chatAttachmentBar = el("div", { className: "aipa-chat-attachment-bar" }, [chatAttachmentButton, chatReversePrompt, chatAttachmentName, chatAttachment]);
+    const chatMain = el("div", { className: "aipa-chat-main" });
+    chatMain.append(
         el("section", { className: "aipa-chat-intro" }, [el("strong", { textContent: "创作 Agent" }), el("p", { textContent: "持续讨论，确认方案后再交给工作流。" })]),
         chatMessages,
         chatSuggestions,
         label("你的想法", chatInput),
+        chatAttachmentBar,
         el("div", { className: "aipa-actions aipa-chat-actions" }, [chatSend]),
         el("div", { className: "aipa-actions aipa-chat-plan-actions" }, [chatWritePlan, chatGenerate]),
     );
+    chatWorkspace.append(chatSessions, chatMain);
+    chat.append(chatWorkspace);
 
     const planner = el("div", { className: "aipa-view" });
     const plannerSelect = el("select", { ariaLabel: "选择提示词规划节点" });
@@ -1055,6 +1108,7 @@ function buildPanel() {
         for (const message of state.chat.messages.slice(-24)) {
             const bubble = el("article", { className: `aipa-chat-message is-${message.role}` });
             bubble.append(el("span", { className: "aipa-chat-speaker", textContent: message.role === "user" ? "你" : "AI 创作 Agent" }));
+            if (message.attachmentName) bubble.append(el("small", { className: "aipa-chat-message-attachment", textContent: `已附加图片：${message.attachmentName}` }));
             bubble.append(el("p", { textContent: message.content }));
             if (message.plan?.ready) {
                 const plan = message.plan;
@@ -1069,6 +1123,63 @@ function buildPanel() {
             chatMessages.append(bubble);
         }
         chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function renderChatSessions() {
+        chatSessionList.replaceChildren();
+        for (const session of state.chatSessions.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))) {
+            const button = el("button", {
+                className: `aipa-chat-session ${session.id === state.activeChatId ? "is-active" : ""}`,
+                type: "button",
+                ariaLabel: `切换到对话：${session.title}`,
+            });
+            const firstUserMessage = session.messages.find((message) => message.role === "user")?.content || "等待你的第一个想法";
+            button.append(el("strong", { textContent: session.title || "新对话" }), el("small", { textContent: `${session.messages.filter((message) => message.role === "user").length} 条消息 · ${firstUserMessage.slice(0, 28)}` }));
+            button.onclick = () => {
+                if (session.id === state.activeChatId) return;
+                if (state.chat.sending) cancelChat();
+                state.activeChatId = session.id;
+                state.chat = session;
+                state.chat.attachment = null;
+                updateAttachmentUI();
+                setStatus("success", `已切换到“${session.title}”。每个对话使用独立记忆。`);
+                persistChatSession(session);
+                update();
+            };
+            chatSessionList.append(button);
+        }
+    }
+
+    function updateAttachmentUI() {
+        const attachment = state.chat.attachment;
+        chatAttachmentName.textContent = attachment ? `${attachment.name}（已附加）` : "未选择图片";
+        chatReversePrompt.disabled = !attachment || state.chat.sending;
+        chatAttachmentButton.disabled = state.chat.sending;
+    }
+
+    async function readAttachment(file) {
+        if (!file) return;
+        if (!file.type.startsWith("image/")) {
+            setStatus("error", "请选择 PNG、JPG、WEBP 或 GIF 图片。" );
+            update();
+            return;
+        }
+        if (file.size > 8 * 1024 * 1024) {
+            setStatus("error", "图片不能超过 8 MB。" );
+            update();
+            return;
+        }
+        const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ""));
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+        state.chat.attachment = { name: file.name, dataUrl };
+        chatInput.placeholder = "可以补充要求，也可以直接点击“反推提示词”";
+        setStatus("success", `已附加图片“${file.name}”，可发送给 AI 或反推提示词。`);
+        updateAttachmentUI();
+        update();
     }
 
     function buildAgentWorkflowContext() {
@@ -1154,7 +1265,9 @@ function buildPanel() {
         syncGenerationControls();
         workflowMapping.update();
         renderWorkflowStages();
+        renderChatSessions();
         renderChatMessages();
+        updateAttachmentUI();
         chat.classList.toggle("is-active", state.view === "main" && state.tab === "chat");
         planner.classList.toggle("is-active", state.view === "main" && state.tab === "planner");
         reviewer.classList.toggle("is-active", state.view === "main" && state.tab === "reviewer");
@@ -1181,7 +1294,7 @@ function buildPanel() {
         saveSettingsButton.disabled = state.settings.saving || state.settings.refreshing;
         plannerAdd.disabled = Boolean(mappingNode("planner"));
         reviewerAdd.disabled = Boolean(mappingNode("reviewer"));
-        chatSend.disabled = !state.chat.sending && !chatInput.value.trim();
+        chatSend.disabled = !state.chat.sending && !chatInput.value.trim() && !state.chat.attachment;
         chatSend.textContent = state.chat.sending ? "终止生成" : "发送给 AI";
         chatSend.title = state.chat.sending ? "终止本次 AI 生成" : "发送消息给 AI";
         chatSend.ariaLabel = state.chat.sending ? "终止本次 AI 生成" : "发送消息给 AI";
@@ -1251,10 +1364,15 @@ function buildPanel() {
     settingsButton.onclick = () => { state.view = "settings"; settingsError.textContent = ""; update(); loadSettings(); };
     settingsHeading.querySelector(".aipa-back-button").onclick = () => { state.view = "main"; update(); };
     newChatButton.onclick = () => {
-        state.chat = newChatSession();
-        try { window.localStorage.removeItem(CHAT_SESSION_STORAGE_KEY); } catch {}
+        if (state.chat.sending) cancelChat();
+        const session = newChatSession();
+        state.chatSessions.unshift(session);
+        state.activeChatId = session.id;
+        state.chat = session;
         state.tab = "chat";
-        setStatus("success", "已开始新对话。当前工作流不会被改动。" );
+        state.chatExpanded = true;
+        setStatus("success", "已开始新对话。每个对话都有独立记忆。" );
+        persistChatSession(session);
         update();
     };
     chatExpandButton.onclick = () => {
@@ -1281,14 +1399,19 @@ function buildPanel() {
         update();
     }
 
-    async function sendChat() {
+    async function sendChat(options = {}) {
         const message = chatInput.value.trim();
-        if (!message || state.chat.sending) return;
+        const attachment = state.chat.attachment;
+        if ((!message && !attachment) || state.chat.sending) return;
         const history = state.chat.messages
             .filter((item) => item.role === "user" || item.role === "assistant")
             .slice(-16)
             .map((item) => ({ role: item.role, content: item.content }));
-        state.chat.messages.push({ role: "user", content: message });
+        state.chat.messages.push({ role: "user", content: message || "请分析这张参考图。", attachmentName: attachment?.name || "" });
+        if (state.chat.messages.filter((item) => item.role === "user").length === 1) {
+            state.chat.title = (message || "图片反推").slice(0, 28);
+        }
+        state.chat.updatedAt = Date.now();
         const requestId = ++state.chat.nextRequestId;
         const abortController = new AbortController();
         state.chat.sending = true;
@@ -1306,6 +1429,8 @@ function buildPanel() {
                     history,
                     session_memory: state.chat.memory,
                     workflow_context: buildAgentWorkflowContext(),
+                    image_data_url: attachment?.dataUrl || "",
+                    reverse_prompt: options.reversePrompt === true,
                 }),
                 signal: abortController.signal,
             });
@@ -1314,6 +1439,7 @@ function buildPanel() {
             state.chat.memory = String(result.session_memory || state.chat.memory || "").slice(0, 1600);
             state.chat.lastPlan = plan.ready ? plan : null;
             state.chat.messages.push({ role: "assistant", content: plan.reply, plan });
+            state.chat.updatedAt = Date.now();
             setStatus("success", plan.ready ? "方案已准备好。可以写入创作需求，或交给工作流生成。" : "Agent 已记录当前对话，可以继续补充或回答它的问题。" );
         } catch (error) {
             if (state.chat.activeRequestId !== requestId) return;
@@ -1327,6 +1453,8 @@ function buildPanel() {
             state.chat.sending = false;
             state.chat.abortController = null;
             state.chat.activeRequestId = 0;
+            state.chat.attachment = null;
+            chatInput.placeholder = "例如：我没有想法，帮我设计一张有故事感的二次元壁纸";
             persistChatSession(state.chat);
             update();
         }
@@ -1334,6 +1462,13 @@ function buildPanel() {
 
     chatSend.onclick = () => { if (state.chat.sending) cancelChat(); else void sendChat(); };
     chatInput.oninput = () => update();
+    chatAttachmentButton.onclick = () => chatAttachment.click();
+    chatAttachment.onchange = () => { void readAttachment(chatAttachment.files?.[0]); chatAttachment.value = ""; };
+    chatReversePrompt.onclick = () => {
+        if (!state.chat.attachment || state.chat.sending) return;
+        if (!chatInput.value.trim()) chatInput.value = "请根据这张参考图反推适合生图的提示词，详细描述主体、构图、镜头、光线、色彩和风格。";
+        void sendChat({ reversePrompt: true });
+    };
     chatInput.onkeydown = (event) => {
         if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
             event.preventDefault();
