@@ -21,6 +21,7 @@ from nodes import common_ksampler
 
 
 EXTENSION_DIR = Path(__file__).parent
+CONFIG_FILE_NAME = "config.json"
 DEFAULT_PARAMETERS = {
     "sampler_name": "euler",
     "scheduler": "normal",
@@ -33,6 +34,8 @@ DEFAULT_PARAMETERS = {
 
 PROMPT_FORMATS = ("tag", "natural", "structured")
 REVIEW_SCORE_FIELDS = ("composition", "prompt_alignment", "subject_clarity", "technical_quality")
+
+
 def local_generation_model_options():
     """Read local generation weights through ComfyUI's configured model paths."""
     checkpoints = folder_paths.get_filename_list("checkpoints")
@@ -71,29 +74,53 @@ def normalize_prompt_format(value):
     return value if value in PROMPT_FORMATS else "tag"
 
 
+def config_paths():
+    """Prefer a user-owned config path so plugin updates do not replace it."""
+    legacy_path = EXTENSION_DIR / CONFIG_FILE_NAME
+    get_user_directory = getattr(folder_paths, "get_user_directory", None)
+    if not callable(get_user_directory):
+        return legacy_path, legacy_path
+    try:
+        user_directory = Path(get_user_directory())
+    except (OSError, TypeError, ValueError):
+        return legacy_path, legacy_path
+    return user_directory / "ComfyUI-AI-Prompt-Assistant" / CONFIG_FILE_NAME, legacy_path
+
+
+def read_config_file(path):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"Invalid AI Prompt Assistant config.json: {error}") from error
+
+
+def non_empty_environment_value(name, fallback):
+    """A blank launcher environment variable must not erase saved settings."""
+    value = os.environ.get(name)
+    return value.strip() if isinstance(value, str) and value.strip() else fallback
+
+
 def load_config():
     config = {}
-    config_path = EXTENSION_DIR / "config.json"
+    user_config_path, legacy_config_path = config_paths()
+    config_path = user_config_path if user_config_path.is_file() else legacy_config_path
     if config_path.is_file():
-        try:
-            config = json.loads(config_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as error:
-            raise RuntimeError(f"Invalid AI Prompt Assistant config.json: {error}") from error
+        config = read_config_file(config_path)
 
-    use_json_mode = normalize_bool(os.environ.get("COMFY_AI_ASSISTANT_JSON_MODE", config.get("use_json_mode", True)))
+    use_json_mode = normalize_bool(non_empty_environment_value("COMFY_AI_ASSISTANT_JSON_MODE", config.get("use_json_mode", True)))
     append_chat_completions = normalize_bool(config.get("append_chat_completions", True))
     allow_parameter_tuning = normalize_bool(config.get("allow_parameter_tuning", True))
     return {
-        "api_url": os.environ.get("COMFY_AI_ASSISTANT_API_URL", config.get("api_url", "")).strip(),
-        "api_key": os.environ.get("COMFY_AI_ASSISTANT_API_KEY", config.get("api_key", "")).strip(),
-        "model": os.environ.get("COMFY_AI_ASSISTANT_MODEL", config.get("model", "")).strip(),
-    "timeout_seconds": int(os.environ.get("COMFY_AI_ASSISTANT_TIMEOUT", config.get("timeout_seconds", 90))),
-    "use_json_mode": bool(use_json_mode),
-    "append_chat_completions": append_chat_completions,
-    "allow_parameter_tuning": allow_parameter_tuning,
-    # Direct connections are more reliable for local/OpenAI-compatible gateways.
-    # Users who need a network proxy can explicitly opt back in from settings.
-    "use_system_proxy": normalize_bool(config.get("use_system_proxy", False)),
+        "api_url": str(non_empty_environment_value("COMFY_AI_ASSISTANT_API_URL", config.get("api_url", ""))).strip(),
+        "api_key": str(non_empty_environment_value("COMFY_AI_ASSISTANT_API_KEY", config.get("api_key", ""))).strip(),
+        "model": str(non_empty_environment_value("COMFY_AI_ASSISTANT_MODEL", config.get("model", ""))).strip(),
+        "timeout_seconds": int(non_empty_environment_value("COMFY_AI_ASSISTANT_TIMEOUT", config.get("timeout_seconds", 90))),
+        "use_json_mode": bool(use_json_mode),
+        "append_chat_completions": append_chat_completions,
+        "allow_parameter_tuning": allow_parameter_tuning,
+        # Direct connections are more reliable for local/OpenAI-compatible gateways.
+        # Users who need a network proxy can explicitly opt back in from settings.
+        "use_system_proxy": normalize_bool(config.get("use_system_proxy", False)),
     }
 
 
@@ -148,6 +175,7 @@ def public_config():
         "use_system_proxy": config["use_system_proxy"],
         "api_key_set": bool(config["api_key"]),
         "api_key_masked": mask_api_key(config["api_key"]),
+        "config_storage": "ComfyUI 用户配置目录",
     }
 
 
@@ -175,7 +203,9 @@ def save_config(values):
         "allow_parameter_tuning": allow_parameter_tuning,
         "use_system_proxy": use_system_proxy,
     }
-    (EXTENSION_DIR / "config.json").write_text(json.dumps(config, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
+    config_path, _ = config_paths()
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(json.dumps(config, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
     return public_config()
 
 
@@ -255,6 +285,28 @@ def register_api_routes():
             "schedulers": scheduler_options(),
         })
 
+    @routes.post("/aipa/chat")
+    async def post_chat(request):
+        try:
+            values = await request.json()
+            if not isinstance(values, dict):
+                raise ValueError("Chat payload must be an object.")
+            message = str(values.get("message", "")).strip()
+            if not message:
+                raise ValueError("请先输入想法或让 AI 帮你构思。")
+            if len(message) > 4000:
+                raise ValueError("单条消息不能超过 4000 个字符。")
+            history = sanitize_chat_history(values.get("history", []))
+            result = call_ai(
+                [{"role": "system", "content": chat_instruction()}] + history + [{"role": "user", "content": message}],
+                request_label="AI 对话请求",
+            )
+            return web.json_response(normalize_chat_result(result))
+        except (json.JSONDecodeError, ValueError, TypeError) as error:
+            return web.json_response({"error": str(error)}, status=400)
+        except RuntimeError as error:
+            return web.json_response({"error": str(error)}, status=502)
+
 
 register_api_routes()
 
@@ -289,9 +341,10 @@ def call_ai(messages, request_label="AI 请求", timeout_multiplier=1):
     config = load_config()
     missing = [name for name in ("api_url", "api_key", "model") if not config[name]]
     if missing:
+        labels = {"api_url": "API 地址", "api_key": "API Key", "model": "大模型"}
         raise RuntimeError(
-            "AI Prompt Assistant is not configured. Copy config.example.json to config.json "
-            "and set api_url, api_key, and model."
+            "AI 服务未配置。请打开悬浮窗右上角“设置”，填写 API 地址、API Key 和大模型后点击“保存配置”。"
+            "无需复制 config.json。缺少：" + "、".join(labels[name] for name in missing)
         )
 
     payload = {
@@ -346,6 +399,50 @@ def call_ai(messages, request_label="AI 请求", timeout_multiplier=1):
     except (KeyError, IndexError, ValueError, TypeError) as error:
         raise RuntimeError("AI service response did not contain a chat completion.") from error
     return extract_json(content)
+
+
+def sanitize_chat_history(history):
+    if not isinstance(history, list):
+        return []
+    clean_history = []
+    for item in history[-12:]:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role", "")).strip().lower()
+        content = str(item.get("content", "")).strip()
+        if role not in {"user", "assistant"} or not content:
+            continue
+        clean_history.append({"role": role, "content": content[:3000]})
+    return clean_history
+
+
+def chat_instruction():
+    return """You are a practical Chinese-speaking creative director inside a ComfyUI image-generation workspace.
+Help the user explore ideas through a concise, natural conversation. If their request is vague or they say they have no idea, propose one strong visual concept yourself instead of making them do all the ideation. Preserve explicit requirements and avoid named artists, copyrighted characters, or unsupported claims.
+Return only one JSON object with exactly these fields:
+{
+  "reply": "short Chinese conversational reply",
+  "creative_brief": "a complete Chinese image brief ready for image generation",
+  "style_or_constraints": "Chinese style, composition, lighting, framing, and constraints",
+  "prompt_format": "tag, natural, or structured",
+  "ready_to_generate": true
+}
+Always provide a usable creative_brief and style_or_constraints, even when the user only asks for inspiration. Choose tag for most anime/SD workflows, natural for Flux-like models, and structured when the user asks for precise scene control. The user controls the negative prompt and generation parameters separately."""
+
+
+def normalize_chat_result(result):
+    result = result if isinstance(result, dict) else {}
+    creative_brief = str(result.get("creative_brief", "")).strip()
+    if not creative_brief:
+        raise RuntimeError("AI 对话没有返回可用于出图的创作需求，请重试。")
+    prompt_format = normalize_prompt_format(result.get("prompt_format"))
+    return {
+        "reply": str(result.get("reply", "已为你整理好一套创作方案。")).strip() or "已为你整理好一套创作方案。",
+        "creative_brief": creative_brief,
+        "style_or_constraints": str(result.get("style_or_constraints", "")).strip(),
+        "prompt_format": prompt_format,
+        "ready_to_generate": normalize_bool(result.get("ready_to_generate"), True),
+    }
 
 
 def clamp_int(value, default, minimum, maximum):

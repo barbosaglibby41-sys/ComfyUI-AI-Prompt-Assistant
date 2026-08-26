@@ -108,6 +108,28 @@
 .aipa-primary { flex: 1; border: 1px solid var(--aipa-accent); color: var(--aipa-accent-ink); background: var(--aipa-accent); font-weight: 600; }
 .aipa-secondary { border: 1px solid var(--aipa-line); color: var(--aipa-text); background: var(--aipa-surface-2); }
 .aipa-actions button:hover, .aipa-actions button:focus-visible { filter: brightness(1.1); outline: 2px solid rgba(85, 216, 139, .35); outline-offset: 1px; }
+.aipa-actions button:disabled { opacity: .58; cursor: wait; filter: none; }
+.aipa-chat-view { padding-top: 12px; }
+.aipa-chat-intro { margin-bottom: 9px; padding: 9px 10px; border: 1px solid rgba(85, 216, 139, .42); border-radius: 6px; background: rgba(85, 216, 139, .08); }
+.aipa-chat-intro strong { display: block; color: var(--aipa-text); font-size: 12px; }
+.aipa-chat-intro p { margin: 4px 0 0; color: var(--aipa-muted); font-size: 11px; line-height: 1.45; }
+.aipa-chat-messages { display: grid; gap: 8px; min-height: 118px; max-height: 238px; margin-bottom: 9px; padding: 2px 2px 2px 0; overflow-y: auto; overscroll-behavior: contain; scroll-behavior: smooth; }
+.aipa-chat-message { max-width: 94%; padding: 9px 10px; border: 1px solid var(--aipa-line); border-radius: 6px; background: var(--aipa-surface); }
+.aipa-chat-message.is-user { justify-self: end; border-color: rgba(85, 216, 139, .45); background: rgba(85, 216, 139, .12); }
+.aipa-chat-message.is-assistant { justify-self: start; }
+.aipa-chat-speaker { display: block; margin-bottom: 4px; color: var(--aipa-accent); font: 600 10px "JetBrains Mono", monospace; }
+.aipa-chat-message.is-user .aipa-chat-speaker { color: #c8f7da; }
+.aipa-chat-message p { margin: 0; color: var(--aipa-text); font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.aipa-chat-plan { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--aipa-line); }
+.aipa-chat-plan strong { display: block; color: var(--aipa-accent); font-size: 11px; }
+.aipa-chat-plan p { margin-top: 5px; font-size: 11px; }
+.aipa-chat-plan small { display: block; margin-top: 6px; color: var(--aipa-muted); font-size: 10px; line-height: 1.4; }
+.aipa-chat-suggestions { display: grid; grid-template-columns: 1fr; gap: 6px; margin: 0 0 9px; }
+.aipa-suggestion { min-height: 32px; padding: 7px 9px; border: 1px solid var(--aipa-line); border-radius: 5px; color: var(--aipa-muted); background: rgba(32, 45, 67, .46); font: 11px/1.35 "IBM Plex Sans", "Segoe UI", sans-serif; text-align: left; cursor: pointer; }
+.aipa-suggestion:hover, .aipa-suggestion:focus-visible { border-color: var(--aipa-accent); color: var(--aipa-text); outline: 2px solid rgba(85, 216, 139, .22); outline-offset: 1px; }
+.aipa-chat-actions { margin-top: 0; }
+.aipa-chat-plan-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.aipa-chat-plan-actions button { min-width: 0; padding: 0 8px; }
 .aipa-toggle { display: flex; align-items: center; gap: 9px; min-height: 32px; color: var(--aipa-muted); font-size: 11px; cursor: pointer; }
 .aipa-toggle input { width: 16px; height: 16px; accent-color: var(--aipa-accent); }
 .aipa-workflow-state { margin: 2px 0 14px; }
@@ -179,6 +201,8 @@
 @media (max-width: 600px) {
     .aipa-panel { top: 12px; right: 12px; width: calc(100vw - 24px); max-height: calc(100vh - 24px); }
     .aipa-body { max-height: calc(100vh - 82px); }
+    .aipa-chat-messages { max-height: 180px; }
+    .aipa-chat-plan-actions { grid-template-columns: 1fr; }
     .aipa-score-row { grid-template-columns: minmax(70px, 1fr) minmax(58px, 1.25fr) 24px; gap: 6px; }
     .aipa-workflow-stages { grid-template-columns: 1fr; }
 }

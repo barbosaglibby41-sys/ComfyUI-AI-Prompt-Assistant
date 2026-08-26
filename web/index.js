@@ -129,7 +129,7 @@ const MAPPING_ROLES = [
 const state = {
     open: true,
     view: "main",
-    tab: "planner",
+    tab: "chat",
     mapping: {
         planner: "",
         reviewer: "",
@@ -161,6 +161,11 @@ const state = {
     },
     generation: {
         signature: "",
+    },
+    chat: {
+        sending: false,
+        messages: [{ role: "assistant", content: "告诉我一个感觉、主题，或者直接说“我没有想法”。我会给你一套可以直接出图的创作方案。" }],
+        lastPlan: null,
     },
 };
 
@@ -751,6 +756,19 @@ function formatLabel(format) {
     return PROMPT_FORMATS.find((item) => item.value === format)?.label || "提示词格式未指定";
 }
 
+function normalizeChatPlan(result) {
+    const promptFormat = PROMPT_FORMATS.some((item) => item.value === result?.prompt_format) ? result.prompt_format : "tag";
+    const creativeBrief = String(result?.creative_brief || "").trim();
+    if (!creativeBrief) throw new Error("AI 没有返回创作需求，请重试。");
+    return {
+        reply: String(result?.reply || "已为你整理好一套创作方案。").trim(),
+        creativeBrief,
+        constraints: String(result?.style_or_constraints || "").trim(),
+        promptFormat,
+        ready: result?.ready_to_generate !== false,
+    };
+}
+
 function buildPanel() {
     const root = el("section", { className: "aipa-panel", ariaLabel: "AI Prompt Assistant" });
     const header = el("header", { className: "aipa-header" });
@@ -760,10 +778,33 @@ function buildPanel() {
     const headerActions = el("div", { className: "aipa-header-actions" }, [settingsButton, minimize]);
     header.append(title, headerActions);
     const tabs = el("div", { className: "aipa-tabs", role: "tablist" });
+    const chatTab = el("button", { className: "aipa-tab", type: "button", textContent: "AI 对话", role: "tab", ariaLabel: "打开 AI 对话" });
     const plannerTab = el("button", { className: "aipa-tab", type: "button", textContent: "提示词规划", role: "tab" });
     const reviewerTab = el("button", { className: "aipa-tab", type: "button", textContent: "图片评审", role: "tab" });
-    tabs.append(plannerTab, reviewerTab);
+    tabs.append(chatTab, plannerTab, reviewerTab);
     const body = el("div", { className: "aipa-body" });
+
+    const chat = el("div", { className: "aipa-view aipa-chat-view" });
+    const chatMessages = el("div", { className: "aipa-chat-messages", role: "log", ariaLive: "polite", ariaLabel: "与 AI 的对话" });
+    const chatSuggestions = el("div", { className: "aipa-chat-suggestions", ariaLabel: "灵感建议" });
+    const chatInput = el("textarea", { rows: 2, placeholder: "例如：我没有想法，帮我设计一张有故事感的二次元壁纸", ariaLabel: "输入想法或出图需求" });
+    const chatSend = el("button", { className: "aipa-primary", type: "button", textContent: "发送给 AI", ariaLabel: "发送消息给 AI" });
+    const chatWritePlan = el("button", { className: "aipa-secondary", type: "button", textContent: "写入创作需求", ariaLabel: "将 AI 方案写入创作需求" });
+    const chatGenerate = el("button", { className: "aipa-primary", type: "button", textContent: "直接生成", ariaLabel: "使用 AI 方案生成提示词并排队" });
+    const inspirationPrompts = ["我没有想法，帮我设计一张有故事感的二次元壁纸", "给我一个适合手机壁纸的电影感场景"];
+    for (const prompt of inspirationPrompts) {
+        const suggestion = el("button", { className: "aipa-suggestion", type: "button", textContent: prompt, ariaLabel: `使用灵感：${prompt}` });
+        suggestion.onclick = () => { chatInput.value = prompt; chatInput.focus(); };
+        chatSuggestions.append(suggestion);
+    }
+    chat.append(
+        el("section", { className: "aipa-chat-intro" }, [el("strong", { textContent: "从一个念头开始" }), el("p", { textContent: "AI 会把对话整理成创作需求，再交给提示词规划和你的工作流。" })]),
+        chatMessages,
+        chatSuggestions,
+        label("你的想法", chatInput),
+        el("div", { className: "aipa-actions aipa-chat-actions" }, [chatSend]),
+        el("div", { className: "aipa-actions aipa-chat-plan-actions" }, [chatWritePlan, chatGenerate]),
+    );
 
     const planner = el("div", { className: "aipa-view" });
     const plannerSelect = el("select", { ariaLabel: "选择提示词规划节点" });
@@ -856,7 +897,7 @@ function buildPanel() {
     const statusHost = el("p", { className: "aipa-operation-status", role: "status", ariaLive: "polite" });
     body.append(statusHost);
 
-    body.append(planner, reviewer, settings);
+    body.append(chat, planner, reviewer, settings);
     root.append(header, tabs, body);
     document.body.append(root);
     const launcher = el("button", { className: "aipa-launcher", type: "button", textContent: "AI", title: "打开 AI Prompt Assistant", ariaLabel: "打开 AI Prompt Assistant" });
@@ -959,6 +1000,63 @@ function buildPanel() {
         return applied;
     }
 
+    function renderChatMessages() {
+        chatMessages.replaceChildren();
+        for (const message of state.chat.messages.slice(-24)) {
+            const bubble = el("article", { className: `aipa-chat-message is-${message.role}` });
+            bubble.append(el("span", { className: "aipa-chat-speaker", textContent: message.role === "user" ? "你" : "AI 创作总监" }));
+            bubble.append(el("p", { textContent: message.content }));
+            if (message.plan) {
+                const plan = message.plan;
+                const planCard = el("section", { className: "aipa-chat-plan", ariaLabel: "AI 整理的创作方案" });
+                planCard.append(
+                    el("strong", { textContent: "已整理为可出图方案" }),
+                    el("p", { textContent: plan.creativeBrief }),
+                    plan.constraints ? el("small", { textContent: plan.constraints }) : el("small", { textContent: formatLabel(plan.promptFormat) }),
+                );
+                bubble.append(planCard);
+            }
+            chatMessages.append(bubble);
+        }
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function applyChatPlan(plan, openPlanner = true) {
+        if (!plan) return false;
+        brief.value = plan.creativeBrief;
+        constraints.value = plan.constraints;
+        plannerFormat.value = plan.promptFormat;
+        if (openPlanner) state.tab = "planner";
+        setStatus("success", "AI 方案已写入创作需求。你可以检查后生成，或直接提交。" );
+        return true;
+    }
+
+    function submitPlanner(source = "提示词规划") {
+        let node = mappingNode("planner");
+        if (!node) {
+            try {
+                node = addAssistantNode("planner");
+                syncGenerationControls(true);
+            } catch (error) {
+                setStatus("error", error.message || "添加提示词规划节点失败。");
+                return false;
+            }
+        }
+        if (!brief.value.trim()) {
+            setStatus("error", "请先填写创作需求。" );
+            return false;
+        }
+        const configured = writeGenerationControlsToWorkflow();
+        setWidget(node, "creative_brief", brief.value);
+        setWidget(node, "style_or_constraints", constraints.value);
+        setWidget(node, "prompt_format", plannerFormat.value);
+        selectCanvasNode(node);
+        state.pendingPlannerApply = true;
+        setStatus("working", `已同步 ${configured} 项用户设置，${source}已提交。`);
+        queue();
+        return true;
+    }
+
     function update() {
         allNodes().forEach(localizeAssistantNode);
         autoMap();
@@ -977,12 +1075,18 @@ function buildPanel() {
         syncGenerationControls();
         workflowMapping.update();
         renderWorkflowStages();
+        renderChatMessages();
+        chat.classList.toggle("is-active", state.view === "main" && state.tab === "chat");
         planner.classList.toggle("is-active", state.view === "main" && state.tab === "planner");
         reviewer.classList.toggle("is-active", state.view === "main" && state.tab === "reviewer");
         settings.classList.toggle("is-active", state.view === "settings");
         tabs.classList.toggle("is-hidden", state.view === "settings");
+        chatTab.classList.toggle("is-active", state.tab === "chat");
         plannerTab.classList.toggle("is-active", state.tab === "planner");
         reviewerTab.classList.toggle("is-active", state.tab === "reviewer");
+        chatTab.ariaSelected = String(state.tab === "chat");
+        plannerTab.ariaSelected = String(state.tab === "planner");
+        reviewerTab.ariaSelected = String(state.tab === "reviewer");
         root.classList.toggle("is-collapsed", !state.open);
         launcher.classList.toggle("is-visible", !state.open);
         reportHost.replaceChildren(makeReport(state.lastReview));
@@ -994,6 +1098,10 @@ function buildPanel() {
         saveSettingsButton.disabled = state.settings.saving || state.settings.refreshing;
         plannerAdd.disabled = Boolean(mappingNode("planner"));
         reviewerAdd.disabled = Boolean(mappingNode("reviewer"));
+        chatSend.disabled = state.chat.sending;
+        chatSend.textContent = state.chat.sending ? "AI 正在构思…" : "发送给 AI";
+        chatWritePlan.disabled = state.chat.sending || !state.chat.lastPlan;
+        chatGenerate.disabled = state.chat.sending || !state.chat.lastPlan;
         const connection = reviewConnectionState();
         reviewConnection.textContent = connection.text;
         reviewConnection.dataset.kind = connection.kind;
@@ -1049,6 +1157,7 @@ function buildPanel() {
         persistManualMapping();
         update();
     };
+    chatTab.onclick = () => { state.tab = "chat"; update(); };
     plannerTab.onclick = () => { state.tab = "planner"; update(); };
     reviewerTab.onclick = () => { state.tab = "reviewer"; update(); };
     settingsButton.onclick = () => { state.view = "settings"; settingsError.textContent = ""; update(); loadSettings(); };
@@ -1057,27 +1166,48 @@ function buildPanel() {
     launcher.onclick = () => { state.open = true; update(); };
     plannerLocate.onclick = () => selectCanvasNode(mappingNode("planner"));
     reviewerLocate.onclick = () => selectCanvasNode(mappingNode("reviewer"));
-    plannerApply.onclick = () => {
-        const node = mappingNode("planner");
-        if (!node) {
-            setStatus("error", "未找到提示词规划节点，请先添加或重新选择节点。");
-            update();
-            return;
-        }
-        if (!brief.value.trim()) {
-            setStatus("error", "请先填写创作需求。");
-            update();
-            return;
-        }
-        const configured = writeGenerationControlsToWorkflow();
-        setWidget(node, "creative_brief", brief.value);
-        setWidget(node, "style_or_constraints", constraints.value);
-        setWidget(node, "prompt_format", plannerFormat.value);
-        selectCanvasNode(node);
-        state.pendingPlannerApply = true;
-        setStatus("working", `已同步 ${configured} 项用户设置，并提交${PROMPT_FORMATS.find((item) => item.value === plannerFormat.value)?.label || "提示词"}规划。`);
+    plannerApply.onclick = () => { submitPlanner(`${PROMPT_FORMATS.find((item) => item.value === plannerFormat.value)?.label || "提示词"}规划`); update(); };
+
+    async function sendChat() {
+        const message = chatInput.value.trim();
+        if (!message || state.chat.sending) return;
+        const history = state.chat.messages
+            .filter((item) => item.role === "user" || item.role === "assistant")
+            .slice(-12)
+            .map((item) => ({ role: item.role, content: item.content }));
+        state.chat.messages.push({ role: "user", content: message });
+        state.chat.sending = true;
+        chatInput.value = "";
+        setStatus("working", "AI 正在整理创作方案…");
         update();
-        queue();
+        try {
+            const result = await aipaRequest("/aipa/chat", { method: "POST", body: JSON.stringify({ message, history }) });
+            const plan = normalizeChatPlan(result);
+            state.chat.lastPlan = plan;
+            state.chat.messages.push({ role: "assistant", content: plan.reply, plan });
+            setStatus("success", "方案已准备好。可以写入创作需求，或直接生成。" );
+        } catch (error) {
+            setStatus("error", error.message || "AI 对话失败，请检查 API 设置后重试。" );
+        } finally {
+            state.chat.sending = false;
+            update();
+        }
+    }
+
+    chatSend.onclick = () => { void sendChat(); };
+    chatInput.onkeydown = (event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+            event.preventDefault();
+            void sendChat();
+        }
+    };
+    chatWritePlan.onclick = () => {
+        if (applyChatPlan(state.chat.lastPlan)) update();
+    };
+    chatGenerate.onclick = () => {
+        if (!applyChatPlan(state.chat.lastPlan)) return;
+        submitPlanner("AI 对话方案");
+        update();
     };
     reviewerApply.onclick = () => {
         const node = mappingNode("reviewer");
@@ -1225,7 +1355,7 @@ function buildPanel() {
             state.settings.allowParameterTuning = config.allow_parameter_tuning !== false;
             apiKeyInput.value = "";
             apiKeyInput.placeholder = config.api_key_masked ? `已配置 ${config.api_key_masked}，留空则保留` : "输入 API Key";
-            settingsStatus.textContent = "配置已保存，后续 AI 节点会使用新设置。";
+            settingsStatus.textContent = `配置已保存到${config.config_storage || "ComfyUI 用户配置目录"}，后续 AI 节点会立即使用新设置。`;
         } catch (error) {
             setSettingsError(error.message || "保存配置失败。");
             settingsStatus.textContent = "";
