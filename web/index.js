@@ -132,6 +132,9 @@ const INITIAL_AGENT_MESSAGE = "我是你的创作 Agent。可以持续和我讨�
 function newChatSession() {
     return {
         sending: false,
+        abortController: null,
+        activeRequestId: 0,
+        nextRequestId: 0,
         memory: "",
         messages: [{ role: "assistant", content: INITIAL_AGENT_MESSAGE }],
         lastPlan: null,
@@ -150,6 +153,9 @@ function restoreChatSession() {
         if (!messages.length) return newChatSession();
         return {
             sending: false,
+            abortController: null,
+            activeRequestId: 0,
+            nextRequestId: 0,
             memory: String(saved.memory || "").slice(0, 1600),
             messages,
             lastPlan: saved.lastPlan && typeof saved.lastPlan === "object" ? saved.lastPlan : null,
@@ -512,7 +518,7 @@ function queue() {
     app.queuePrompt?.(0);
 }
 
-function addAssistantNode(role) {
+function addAssistantNode(role, focus = true) {
     const graph = currentGraph();
     const node = window.LiteGraph?.createNode(NODE_TYPES[role]);
     if (!graph || !node) throw new Error("无法创建节点，请检查插件是否已加载。");
@@ -532,7 +538,7 @@ function addAssistantNode(role) {
     state.mapping[role] = String(node.id);
     state.manualRoles.add(role);
     persistManualMapping();
-    selectCanvasNode(node);
+    if (focus) selectCanvasNode(node);
     return node;
 }
 
@@ -838,7 +844,7 @@ function buildPanel() {
     const inspirationPrompts = ["我没有想法，帮我设计一张有故事感的二次元壁纸", "给我一个适合手机壁纸的电影感场景"];
     for (const prompt of inspirationPrompts) {
         const suggestion = el("button", { className: "aipa-suggestion", type: "button", textContent: prompt, ariaLabel: `使用灵感：${prompt}` });
-        suggestion.onclick = () => { chatInput.value = prompt; chatInput.focus(); };
+        suggestion.onclick = () => { chatInput.value = prompt; chatInput.focus(); update(); };
         chatSuggestions.append(suggestion);
     }
     chat.append(
@@ -1082,21 +1088,33 @@ function buildPanel() {
         ].join("\n");
     }
 
-    function applyChatPlan(plan, openPlanner = true) {
+    function applyChatPlan(plan) {
         if (!plan?.ready) return false;
         brief.value = plan.creativeBrief;
         constraints.value = plan.constraints;
         plannerFormat.value = plan.promptFormat;
-        if (openPlanner) state.tab = "planner";
-        setStatus("success", "AI 方案已写入创作需求。你可以检查后生成，或直接提交。" );
+        let plannerNode = mappingNode("planner");
+        try {
+            if (!plannerNode) plannerNode = addAssistantNode("planner", false);
+        } catch (error) {
+            setStatus("error", error.message || "无法添加提示词规划节点。" );
+            return false;
+        }
+        const synced = [
+            setWidget(plannerNode, "creative_brief", plan.creativeBrief),
+            setWidget(plannerNode, "style_or_constraints", plan.constraints),
+            setWidget(plannerNode, "prompt_format", plan.promptFormat),
+        ].filter(Boolean).length;
+        state.generation.signature = "";
+        setStatus("success", `AI 方案已写入创作需求和提示词规划节点（已同步 ${synced} 项）。`);
         return true;
     }
 
-    function submitPlanner(source = "提示词规划") {
+    function submitPlanner(source = "提示词规划", focusNode = true) {
         let node = mappingNode("planner");
         if (!node) {
             try {
-                node = addAssistantNode("planner");
+                node = addAssistantNode("planner", focusNode);
                 syncGenerationControls(true);
             } catch (error) {
                 setStatus("error", error.message || "添加提示词规划节点失败。");
@@ -1111,7 +1129,7 @@ function buildPanel() {
         setWidget(node, "creative_brief", brief.value);
         setWidget(node, "style_or_constraints", constraints.value);
         setWidget(node, "prompt_format", plannerFormat.value);
-        selectCanvasNode(node);
+        if (focusNode) selectCanvasNode(node);
         state.pendingPlannerApply = true;
         setStatus("working", `已同步 ${configured} 项用户设置，${source}已提交。`);
         queue();
@@ -1163,8 +1181,13 @@ function buildPanel() {
         saveSettingsButton.disabled = state.settings.saving || state.settings.refreshing;
         plannerAdd.disabled = Boolean(mappingNode("planner"));
         reviewerAdd.disabled = Boolean(mappingNode("reviewer"));
-        chatSend.disabled = state.chat.sending;
-        chatSend.textContent = state.chat.sending ? "Agent 正在思考…" : "发送给 AI";
+        chatSend.disabled = !state.chat.sending && !chatInput.value.trim();
+        chatSend.textContent = state.chat.sending ? "终止生成" : "发送给 AI";
+        chatSend.title = state.chat.sending ? "终止本次 AI 生成" : "发送消息给 AI";
+        chatSend.ariaLabel = state.chat.sending ? "终止本次 AI 生成" : "发送消息给 AI";
+        chatSend.classList.toggle("aipa-cancel", state.chat.sending);
+        chatInput.disabled = state.chat.sending;
+        chatInput.ariaBusy = String(state.chat.sending);
         chatWritePlan.disabled = state.chat.sending || !state.chat.lastPlan?.ready;
         chatGenerate.disabled = state.chat.sending || !state.chat.lastPlan?.ready;
         const connection = reviewConnectionState();
@@ -1247,6 +1270,17 @@ function buildPanel() {
     reviewerLocate.onclick = () => selectCanvasNode(mappingNode("reviewer"));
     plannerApply.onclick = () => { submitPlanner(`${PROMPT_FORMATS.find((item) => item.value === plannerFormat.value)?.label || "提示词"}规划`); update(); };
 
+    function cancelChat() {
+        if (!state.chat.sending) return;
+        state.chat.abortController?.abort();
+        state.chat.abortController = null;
+        state.chat.activeRequestId = 0;
+        state.chat.sending = false;
+        setStatus("success", "已终止本次 AI 生成。你可以继续输入新的要求。" );
+        persistChatSession(state.chat);
+        update();
+    }
+
     async function sendChat() {
         const message = chatInput.value.trim();
         if (!message || state.chat.sending) return;
@@ -1255,7 +1289,11 @@ function buildPanel() {
             .slice(-16)
             .map((item) => ({ role: item.role, content: item.content }));
         state.chat.messages.push({ role: "user", content: message });
+        const requestId = ++state.chat.nextRequestId;
+        const abortController = new AbortController();
         state.chat.sending = true;
+        state.chat.activeRequestId = requestId;
+        state.chat.abortController = abortController;
         chatInput.value = "";
         setStatus("working", "创作 Agent 正在思考…");
         persistChatSession(state.chat);
@@ -1269,22 +1307,33 @@ function buildPanel() {
                     session_memory: state.chat.memory,
                     workflow_context: buildAgentWorkflowContext(),
                 }),
+                signal: abortController.signal,
             });
+            if (state.chat.activeRequestId !== requestId) return;
             const plan = normalizeChatPlan(result);
             state.chat.memory = String(result.session_memory || state.chat.memory || "").slice(0, 1600);
             state.chat.lastPlan = plan.ready ? plan : null;
             state.chat.messages.push({ role: "assistant", content: plan.reply, plan });
             setStatus("success", plan.ready ? "方案已准备好。可以写入创作需求，或交给工作流生成。" : "Agent 已记录当前对话，可以继续补充或回答它的问题。" );
         } catch (error) {
+            if (state.chat.activeRequestId !== requestId) return;
+            if (error?.name === "AbortError") {
+                setStatus("success", "已终止本次 AI 生成。你可以继续输入新的要求。" );
+                return;
+            }
             setStatus("error", error.message || "AI 对话失败，请检查 API 设置后重试。" );
         } finally {
+            if (state.chat.activeRequestId !== requestId) return;
             state.chat.sending = false;
+            state.chat.abortController = null;
+            state.chat.activeRequestId = 0;
             persistChatSession(state.chat);
             update();
         }
     }
 
-    chatSend.onclick = () => { void sendChat(); };
+    chatSend.onclick = () => { if (state.chat.sending) cancelChat(); else void sendChat(); };
+    chatInput.oninput = () => update();
     chatInput.onkeydown = (event) => {
         if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
             event.preventDefault();
@@ -1296,7 +1345,7 @@ function buildPanel() {
     };
     chatGenerate.onclick = () => {
         if (!applyChatPlan(state.chat.lastPlan)) return;
-        submitPlanner("AI 对话方案");
+        submitPlanner("AI 对话方案", false);
         update();
     };
     reviewerApply.onclick = () => {
