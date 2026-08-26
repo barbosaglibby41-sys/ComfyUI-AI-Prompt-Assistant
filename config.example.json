@@ -1,0 +1,9 @@
+{
+  "api_url": "https://api.openai.com/v1",
+  "api_key": "replace-with-your-api-key",
+  "model": "gpt-4.1-mini",
+  "timeout_seconds": 90,
+  "append_chat_completions": true,
+  "allow_parameter_tuning": true,
+  "use_json_mode": true
+}
