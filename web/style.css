@@ -61,12 +61,14 @@
 }
 .aipa-header-actions { flex: 0 0 auto; }
 .aipa-header:active { cursor: grabbing; }
-.aipa-title { display: flex; gap: 10px; align-items: center; }
+.aipa-title { display: flex; min-width: 0; gap: 10px; align-items: center; }
+.aipa-title > div { min-width: 0; }
 .aipa-title strong, .aipa-title small { display: block; }
-.aipa-title strong { font-size: 14px; }
+.aipa-title strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .aipa-title small { margin-top: 2px; color: var(--aipa-muted); font-size: 11px; }
 .aipa-mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 6px; background: var(--aipa-accent); color: var(--aipa-accent-ink); font: 700 11px "JetBrains Mono", monospace; }
 .aipa-header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.aipa-icon-button.aipa-new-chat-button { width: 48px; padding: 0; font-size: 11px; white-space: nowrap; }
 .aipa-icon-button.aipa-settings-button { width: 42px; padding: 0; font-size: 11px; white-space: nowrap; }
 .aipa-icon-button { width: 32px; height: 32px; color: var(--aipa-muted); background: transparent; border: 1px solid transparent; border-radius: 5px; font-size: 20px; cursor: pointer; }
 .aipa-icon-button:hover, .aipa-icon-button:focus-visible { color: var(--aipa-text); border-color: var(--aipa-line); outline: none; }
@@ -205,6 +207,16 @@
     .aipa-chat-plan-actions { grid-template-columns: 1fr; }
     .aipa-score-row { grid-template-columns: minmax(70px, 1fr) minmax(58px, 1.25fr) 24px; gap: 6px; }
     .aipa-workflow-stages { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 380px) {
+    .aipa-header { gap: 6px; padding-right: 8px; padding-left: 10px; }
+    .aipa-title { gap: 8px; }
+    .aipa-title strong { max-width: 72px; font-size: 12px; }
+    .aipa-title small { display: none; }
+    .aipa-header-actions { gap: 4px; }
+    .aipa-icon-button.aipa-new-chat-button { width: 42px; font-size: 10px; }
+    .aipa-icon-button.aipa-settings-button { width: 38px; font-size: 10px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

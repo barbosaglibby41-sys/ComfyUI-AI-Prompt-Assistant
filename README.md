@@ -57,12 +57,20 @@ format, so existing downstream connections continue to work.
 
 When image review is enabled, the reviewer returns an overall score out of 100, confidence, and four visible quality dimensions: composition, prompt alignment, subject clarity, and technical quality. The floating panel shows the score, rating level, dimension bars, and the AI's observations and suggested changes. Scores are assessments of the current generated image, not a guarantee of a future generation result.
 
+## AI 创作 Agent
+
+悬浮窗的 `AI 对话` 是一个持续创作会话，而不是一次性“文字转提示词”按钮。你可以一直与它讨论灵感、角色、构图、配色和修改方向；它会记住已经确认的偏好，并在每次回复时只读当前工作流的提示词、固定反向提示词、模型、采样器、画幅与成图来源。
+
+当方案尚未确定时，Agent 会继续聊天或提出一个聚焦问题，这时不会启用出图操作。只有它给出完整创作方案后，才会显示可用的 `写入创作需求` 与 `交给工作流生成`。前者只把方案填入提示词规划页，后者才会提交提示词规划任务；两者都不会修改你的固定反向提示词，也不会未经点击直接排队出图。
+
+对话记录与已确认的简短记忆保存在当前浏览器的 ComfyUI 页面本地，刷新页面后可以继续聊天。右上角的 `新对话` 会清除这台浏览器中的该会话记录，不会改动画布、工作流或 API 配置。
+
 ## Workflow
 
 The floating panel is the recommended entry point. It does not require searching the node menu first:
 
-1. Open `AI 对话`. Describe an idea, a feeling, or simply say `我没有想法`. The AI replies in Chinese and turns the conversation into a complete `创作需求` and `风格与约束` plan.
-2. Click `写入创作需求` to inspect or adjust that plan in `提示词规划`; click `直接生成` to create a planning node if needed, copy the plan into it, and queue prompt planning immediately. The chat does not change your fixed negative prompt.
+1. Open `AI 对话`. Describe an idea, a feeling, or simply say `我没有想法`. Continue the conversation until the Agent returns a complete `创作需求` and `风格与约束` plan.
+2. Click `写入创作需求` to inspect or adjust that plan in `提示词规划`; click `交给工作流生成` to create a planning node if needed, copy the plan into it, and queue prompt planning immediately. The chat does not change your fixed negative prompt.
 3. In `提示词规划`, the panel detects the positive/negative `CLIP Text Encode`, sampler, latent size, and decoded image source. Check these in `工作流节点映射`; use `重新识别` or select a different node only when the detected mapping is wrong.
 4. Generate the image as usual. Open `图片评审`, click `添加` beside `评审节点`, leave `成图来源` on the detected `VAE Decode`-like node, write the desired changes, enable image review, then click `连接成图并评审`.
 5. The assistant connects `IMAGE -> AI Image Reviewer`, copies the current prompts and available sampler settings into the reviewer, and shows the score and changes after completion. The source must be an IMAGE-producing node such as `VAE Decode`, not `Save Image`.

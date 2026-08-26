@@ -297,8 +297,17 @@ def register_api_routes():
             if len(message) > 4000:
                 raise ValueError("单条消息不能超过 4000 个字符。")
             history = sanitize_chat_history(values.get("history", []))
+            session_memory = str(values.get("session_memory", "")).strip()[:1600]
+            workflow_context = str(values.get("workflow_context", "")).strip()[:4000]
+            messages = [{"role": "system", "content": chat_instruction()}]
+            if session_memory:
+                messages.append({"role": "system", "content": f"已确认的会话记忆：\n{session_memory}"})
+            if workflow_context:
+                messages.append({"role": "system", "content": f"当前 ComfyUI 工作流状态（只读）：\n{workflow_context}"})
+            messages.extend(history)
+            messages.append({"role": "user", "content": message})
             result = call_ai(
-                [{"role": "system", "content": chat_instruction()}] + history + [{"role": "user", "content": message}],
+                messages,
                 request_label="AI 对话请求",
             )
             return web.json_response(normalize_chat_result(result))
@@ -405,7 +414,7 @@ def sanitize_chat_history(history):
     if not isinstance(history, list):
         return []
     clean_history = []
-    for item in history[-12:]:
+    for item in history[-16:]:
         if not isinstance(item, dict):
             continue
         role = str(item.get("role", "")).strip().lower()
@@ -418,30 +427,36 @@ def sanitize_chat_history(history):
 
 def chat_instruction():
     return """You are a practical Chinese-speaking creative director inside a ComfyUI image-generation workspace.
-Help the user explore ideas through a concise, natural conversation. If their request is vague or they say they have no idea, propose one strong visual concept yourself instead of making them do all the ideation. Preserve explicit requirements and avoid named artists, copyrighted characters, or unsupported claims.
+Act as a continuing creative agent: remember confirmed decisions, discuss and refine ideas over multiple turns, and use the supplied read-only workflow state when it is relevant. Do not force image generation when the user is brainstorming or asking a question. If their request is vague or they say they have no idea, propose one strong visual concept yourself instead of making them do all the ideation. Preserve explicit requirements and avoid named artists, copyrighted characters, or unsupported claims.
 Return only one JSON object with exactly these fields:
 {
   "reply": "short Chinese conversational reply",
-  "creative_brief": "a complete Chinese image brief ready for image generation",
-  "style_or_constraints": "Chinese style, composition, lighting, framing, and constraints",
+  "creative_brief": "a complete Chinese image brief ready for image generation, or an empty string while clarifying",
+  "style_or_constraints": "Chinese style, composition, lighting, framing, and constraints, or an empty string",
   "prompt_format": "tag, natural, or structured",
-  "ready_to_generate": true
+  "ready_to_generate": true,
+  "next_action": "chat, update_plan, or generate",
+  "session_memory": "short Chinese summary of confirmed preferences and decisions for later turns"
 }
-Always provide a usable creative_brief and style_or_constraints, even when the user only asks for inspiration. Choose tag for most anime/SD workflows, natural for Flux-like models, and structured when the user asks for precise scene control. The user controls the negative prompt and generation parameters separately."""
+When the user asks for inspiration or asks to generate, provide a usable creative_brief and style_or_constraints and set ready_to_generate true. When more information is genuinely needed, ask one focused question, keep creative_brief empty, and set ready_to_generate false. Choose tag for most anime/SD workflows, natural for Flux-like models, and structured when the user asks for precise scene control. The user controls the negative prompt and generation parameters separately. Never claim to have changed the workflow: only recommend the next action."""
 
 
 def normalize_chat_result(result):
     result = result if isinstance(result, dict) else {}
     creative_brief = str(result.get("creative_brief", "")).strip()
-    if not creative_brief:
-        raise RuntimeError("AI 对话没有返回可用于出图的创作需求，请重试。")
     prompt_format = normalize_prompt_format(result.get("prompt_format"))
+    ready_to_generate = normalize_bool(result.get("ready_to_generate"), bool(creative_brief)) and bool(creative_brief)
+    next_action = str(result.get("next_action", "chat")).strip().lower()
+    if next_action not in {"chat", "update_plan", "generate"}:
+        next_action = "generate" if ready_to_generate else "chat"
     return {
         "reply": str(result.get("reply", "已为你整理好一套创作方案。")).strip() or "已为你整理好一套创作方案。",
         "creative_brief": creative_brief,
         "style_or_constraints": str(result.get("style_or_constraints", "")).strip(),
         "prompt_format": prompt_format,
-        "ready_to_generate": normalize_bool(result.get("ready_to_generate"), True),
+        "ready_to_generate": ready_to_generate,
+        "next_action": next_action,
+        "session_memory": str(result.get("session_memory", "")).strip()[:1600],
     }
 
 

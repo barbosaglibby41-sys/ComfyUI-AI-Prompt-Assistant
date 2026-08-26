@@ -126,6 +126,51 @@ const MAPPING_ROLES = [
     { key: "image", label: "成图来源", emptyText: "未识别可连接的 IMAGE 输出" },
 ];
 
+const CHAT_SESSION_STORAGE_KEY = "aipa.agent-session.v1";
+const INITIAL_AGENT_MESSAGE = "我是你的创作 Agent。可以持续和我讨论灵感、角色、构图与修改方向；确定方案后，我会把它交给当前工作流。";
+
+function newChatSession() {
+    return {
+        sending: false,
+        memory: "",
+        messages: [{ role: "assistant", content: INITIAL_AGENT_MESSAGE }],
+        lastPlan: null,
+    };
+}
+
+function restoreChatSession() {
+    try {
+        const saved = JSON.parse(window.localStorage.getItem(CHAT_SESSION_STORAGE_KEY) || "null");
+        if (!saved || !Array.isArray(saved.messages)) return newChatSession();
+        const messages = saved.messages.slice(-60).map((message) => ({
+            role: message?.role === "user" ? "user" : "assistant",
+            content: String(message?.content || "").slice(0, 4000),
+            plan: message?.plan && typeof message.plan === "object" ? message.plan : null,
+        })).filter((message) => message.content);
+        if (!messages.length) return newChatSession();
+        return {
+            sending: false,
+            memory: String(saved.memory || "").slice(0, 1600),
+            messages,
+            lastPlan: saved.lastPlan && typeof saved.lastPlan === "object" ? saved.lastPlan : null,
+        };
+    } catch {
+        return newChatSession();
+    }
+}
+
+function persistChatSession(chat) {
+    try {
+        window.localStorage.setItem(CHAT_SESSION_STORAGE_KEY, JSON.stringify({
+            memory: String(chat.memory || "").slice(0, 1600),
+            messages: chat.messages.slice(-60),
+            lastPlan: chat.lastPlan,
+        }));
+    } catch {
+        // The agent remains usable when browser storage is unavailable.
+    }
+}
+
 const state = {
     open: true,
     view: "main",
@@ -162,11 +207,7 @@ const state = {
     generation: {
         signature: "",
     },
-    chat: {
-        sending: false,
-        messages: [{ role: "assistant", content: "告诉我一个感觉、主题，或者直接说“我没有想法”。我会给你一套可以直接出图的创作方案。" }],
-        lastPlan: null,
-    },
+    chat: restoreChatSession(),
 };
 
 function currentGraph() {
@@ -759,13 +800,13 @@ function formatLabel(format) {
 function normalizeChatPlan(result) {
     const promptFormat = PROMPT_FORMATS.some((item) => item.value === result?.prompt_format) ? result.prompt_format : "tag";
     const creativeBrief = String(result?.creative_brief || "").trim();
-    if (!creativeBrief) throw new Error("AI 没有返回创作需求，请重试。");
     return {
         reply: String(result?.reply || "已为你整理好一套创作方案。").trim(),
         creativeBrief,
         constraints: String(result?.style_or_constraints || "").trim(),
         promptFormat,
-        ready: result?.ready_to_generate !== false,
+        ready: result?.ready_to_generate === true && Boolean(creativeBrief),
+        nextAction: ["chat", "update_plan", "generate"].includes(result?.next_action) ? result.next_action : (creativeBrief ? "update_plan" : "chat"),
     };
 }
 
@@ -773,9 +814,10 @@ function buildPanel() {
     const root = el("section", { className: "aipa-panel", ariaLabel: "AI Prompt Assistant" });
     const header = el("header", { className: "aipa-header" });
     const title = el("div", { className: "aipa-title" }, [el("span", { className: "aipa-mark", textContent: "AI" }), el("div", {}, [el("strong", { textContent: "Prompt Assistant" }), el("small", { textContent: "创作工作台" })])]);
+    const newChatButton = el("button", { className: "aipa-icon-button aipa-new-chat-button", type: "button", textContent: "新对话", title: "开始新对话并清除本机保存的聊天记录", ariaLabel: "开始新对话" });
     const settingsButton = el("button", { className: "aipa-icon-button aipa-settings-button", type: "button", textContent: "设置", title: "打开 API 设置", ariaLabel: "打开 API 设置" });
     const minimize = el("button", { className: "aipa-icon-button", type: "button", textContent: "−", title: "收起窗口", ariaLabel: "收起窗口" });
-    const headerActions = el("div", { className: "aipa-header-actions" }, [settingsButton, minimize]);
+    const headerActions = el("div", { className: "aipa-header-actions" }, [newChatButton, settingsButton, minimize]);
     header.append(title, headerActions);
     const tabs = el("div", { className: "aipa-tabs", role: "tablist" });
     const chatTab = el("button", { className: "aipa-tab", type: "button", textContent: "AI 对话", role: "tab", ariaLabel: "打开 AI 对话" });
@@ -790,7 +832,7 @@ function buildPanel() {
     const chatInput = el("textarea", { rows: 2, placeholder: "例如：我没有想法，帮我设计一张有故事感的二次元壁纸", ariaLabel: "输入想法或出图需求" });
     const chatSend = el("button", { className: "aipa-primary", type: "button", textContent: "发送给 AI", ariaLabel: "发送消息给 AI" });
     const chatWritePlan = el("button", { className: "aipa-secondary", type: "button", textContent: "写入创作需求", ariaLabel: "将 AI 方案写入创作需求" });
-    const chatGenerate = el("button", { className: "aipa-primary", type: "button", textContent: "直接生成", ariaLabel: "使用 AI 方案生成提示词并排队" });
+    const chatGenerate = el("button", { className: "aipa-primary", type: "button", textContent: "交给工作流生成", ariaLabel: "使用 AI 方案生成提示词并排队" });
     const inspirationPrompts = ["我没有想法，帮我设计一张有故事感的二次元壁纸", "给我一个适合手机壁纸的电影感场景"];
     for (const prompt of inspirationPrompts) {
         const suggestion = el("button", { className: "aipa-suggestion", type: "button", textContent: prompt, ariaLabel: `使用灵感：${prompt}` });
@@ -798,7 +840,7 @@ function buildPanel() {
         chatSuggestions.append(suggestion);
     }
     chat.append(
-        el("section", { className: "aipa-chat-intro" }, [el("strong", { textContent: "从一个念头开始" }), el("p", { textContent: "AI 会把对话整理成创作需求，再交给提示词规划和你的工作流。" })]),
+        el("section", { className: "aipa-chat-intro" }, [el("strong", { textContent: "创作 Agent" }), el("p", { textContent: "持续讨论，确认方案后再交给工作流。" })]),
         chatMessages,
         chatSuggestions,
         label("你的想法", chatInput),
@@ -1004,9 +1046,9 @@ function buildPanel() {
         chatMessages.replaceChildren();
         for (const message of state.chat.messages.slice(-24)) {
             const bubble = el("article", { className: `aipa-chat-message is-${message.role}` });
-            bubble.append(el("span", { className: "aipa-chat-speaker", textContent: message.role === "user" ? "你" : "AI 创作总监" }));
+            bubble.append(el("span", { className: "aipa-chat-speaker", textContent: message.role === "user" ? "你" : "AI 创作 Agent" }));
             bubble.append(el("p", { textContent: message.content }));
-            if (message.plan) {
+            if (message.plan?.ready) {
                 const plan = message.plan;
                 const planCard = el("section", { className: "aipa-chat-plan", ariaLabel: "AI 整理的创作方案" });
                 planCard.append(
@@ -1021,8 +1063,25 @@ function buildPanel() {
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
+    function buildAgentWorkflowContext() {
+        const plannerNode = mappingNode("planner");
+        const samplerNode = mappingNode("sampler");
+        const latentNode = mappingNode("latent");
+        const imageNode = mappingNode("image");
+        return [
+            `提示词规划节点：${plannerNode ? "已连接" : "未添加"}`,
+            `正向提示词：${widgetValue(mappingNode("positive"), "text") || "未识别"}`,
+            `固定反向提示词：${widgetValue(mappingNode("negative"), "text") || negativePrompt.value || "未填写"}`,
+            `本机出图模型：${generationModel.value || widgetValue(plannerNode, "image_model") || "未选择"}`,
+            `采样器：${widgetValue(samplerNode, "sampler_name") || generationSampler.value || "未识别"}`,
+            `调度器：${widgetValue(samplerNode, "scheduler") || generationScheduler.value || "未识别"}`,
+            `画幅：${widgetValue(latentNode, "width") || generationWidth.value || "未识别"} x ${widgetValue(latentNode, "height") || generationHeight.value || "未识别"}`,
+            `成图来源：${imageNode ? nodeLabel(imageNode) : "未识别"}`,
+        ].join("\n");
+    }
+
     function applyChatPlan(plan, openPlanner = true) {
-        if (!plan) return false;
+        if (!plan?.ready) return false;
         brief.value = plan.creativeBrief;
         constraints.value = plan.constraints;
         plannerFormat.value = plan.promptFormat;
@@ -1099,9 +1158,9 @@ function buildPanel() {
         plannerAdd.disabled = Boolean(mappingNode("planner"));
         reviewerAdd.disabled = Boolean(mappingNode("reviewer"));
         chatSend.disabled = state.chat.sending;
-        chatSend.textContent = state.chat.sending ? "AI 正在构思…" : "发送给 AI";
-        chatWritePlan.disabled = state.chat.sending || !state.chat.lastPlan;
-        chatGenerate.disabled = state.chat.sending || !state.chat.lastPlan;
+        chatSend.textContent = state.chat.sending ? "Agent 正在思考…" : "发送给 AI";
+        chatWritePlan.disabled = state.chat.sending || !state.chat.lastPlan?.ready;
+        chatGenerate.disabled = state.chat.sending || !state.chat.lastPlan?.ready;
         const connection = reviewConnectionState();
         reviewConnection.textContent = connection.text;
         reviewConnection.dataset.kind = connection.kind;
@@ -1162,6 +1221,13 @@ function buildPanel() {
     reviewerTab.onclick = () => { state.tab = "reviewer"; update(); };
     settingsButton.onclick = () => { state.view = "settings"; settingsError.textContent = ""; update(); loadSettings(); };
     settingsHeading.querySelector(".aipa-back-button").onclick = () => { state.view = "main"; update(); };
+    newChatButton.onclick = () => {
+        state.chat = newChatSession();
+        try { window.localStorage.removeItem(CHAT_SESSION_STORAGE_KEY); } catch {}
+        state.tab = "chat";
+        setStatus("success", "已开始新对话。当前工作流不会被改动。" );
+        update();
+    };
     minimize.onclick = () => { state.open = false; update(); };
     launcher.onclick = () => { state.open = true; update(); };
     plannerLocate.onclick = () => selectCanvasNode(mappingNode("planner"));
@@ -1173,23 +1239,34 @@ function buildPanel() {
         if (!message || state.chat.sending) return;
         const history = state.chat.messages
             .filter((item) => item.role === "user" || item.role === "assistant")
-            .slice(-12)
+            .slice(-16)
             .map((item) => ({ role: item.role, content: item.content }));
         state.chat.messages.push({ role: "user", content: message });
         state.chat.sending = true;
         chatInput.value = "";
-        setStatus("working", "AI 正在整理创作方案…");
+        setStatus("working", "创作 Agent 正在思考…");
+        persistChatSession(state.chat);
         update();
         try {
-            const result = await aipaRequest("/aipa/chat", { method: "POST", body: JSON.stringify({ message, history }) });
+            const result = await aipaRequest("/aipa/chat", {
+                method: "POST",
+                body: JSON.stringify({
+                    message,
+                    history,
+                    session_memory: state.chat.memory,
+                    workflow_context: buildAgentWorkflowContext(),
+                }),
+            });
             const plan = normalizeChatPlan(result);
-            state.chat.lastPlan = plan;
+            state.chat.memory = String(result.session_memory || state.chat.memory || "").slice(0, 1600);
+            state.chat.lastPlan = plan.ready ? plan : null;
             state.chat.messages.push({ role: "assistant", content: plan.reply, plan });
-            setStatus("success", "方案已准备好。可以写入创作需求，或直接生成。" );
+            setStatus("success", plan.ready ? "方案已准备好。可以写入创作需求，或交给工作流生成。" : "Agent 已记录当前对话，可以继续补充或回答它的问题。" );
         } catch (error) {
             setStatus("error", error.message || "AI 对话失败，请检查 API 设置后重试。" );
         } finally {
             state.chat.sending = false;
+            persistChatSession(state.chat);
             update();
         }
     }
