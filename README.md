@@ -26,11 +26,11 @@ $env:COMFY_AI_ASSISTANT_MODEL = "gpt-4.1-mini"
 $env:COMFY_AI_ASSISTANT_JSON_MODE = "true"
 ```
 
-Environment variables take precedence over `config.json`. The service receives the creative brief for `AI Prompt Planner`. `AI Image Reviewer` also uploads the connected image, current prompts, and revision request to that service. Do not connect private images unless you accept that transfer.
+Environment variables provide the initial default when no saved setting exists. Once a value is saved in the Settings page, the saved value takes precedence so API endpoints and models can be switched without restarting ComfyUI. The service receives the creative brief for `AI Prompt Planner`. `AI Image Reviewer` also uploads the connected image, current prompts, and revision request to that service. Do not connect private images unless you accept that transfer.
 
-通过设置页保存的 API Key 只写入 ComfyUI 用户配置目录，不会写入工作流 metadata、前端日志或模型列表响应。环境变量仍然优先于已保存配置；空的环境变量不会覆盖已保存的设置。如果设置了 `COMFY_AI_ASSISTANT_API_URL`、`COMFY_AI_ASSISTANT_API_KEY` 或 `COMFY_AI_ASSISTANT_MODEL`，需要修改对应环境变量后重启 ComfyUI 才会生效。
+通过设置页保存的 API Key 只写入 ComfyUI 用户配置目录，不会写入工作流 metadata、前端日志或模型列表响应。已保存的设置优先于环境变量，因此可随时在设置页切换 API 地址、Key 或模型，并立即生效。环境变量只在首次尚未保存对应设置时作为默认值使用。
 
-Restart ComfyUI after adding or changing configuration.
+Changes saved in the Settings page take effect for the next AI request. Restarting ComfyUI is only needed after installing or updating the plugin.
 
 `use_json_mode` asks the Chat Completions endpoint to return a JSON object. It
 is enabled by default and automatically retried without `response_format` when

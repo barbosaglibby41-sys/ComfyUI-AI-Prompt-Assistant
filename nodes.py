@@ -95,9 +95,17 @@ def read_config_file(path):
 
 
 def non_empty_environment_value(name, fallback):
-    """A blank launcher environment variable must not erase saved settings."""
+    """Use an environment value only when no saved value is available."""
     value = os.environ.get(name)
     return value.strip() if isinstance(value, str) and value.strip() else fallback
+
+
+def saved_value_or_environment(config, key, environment_name, default):
+    """Saved settings are user choices; environment values provide first-run defaults."""
+    saved = config.get(key)
+    if saved is not None and str(saved).strip():
+        return saved
+    return non_empty_environment_value(environment_name, default)
 
 
 def load_config():
@@ -107,14 +115,14 @@ def load_config():
     if config_path.is_file():
         config = read_config_file(config_path)
 
-    use_json_mode = normalize_bool(non_empty_environment_value("COMFY_AI_ASSISTANT_JSON_MODE", config.get("use_json_mode", True)))
+    use_json_mode = normalize_bool(saved_value_or_environment(config, "use_json_mode", "COMFY_AI_ASSISTANT_JSON_MODE", True))
     append_chat_completions = normalize_bool(config.get("append_chat_completions", True))
     allow_parameter_tuning = normalize_bool(config.get("allow_parameter_tuning", True))
     return {
-        "api_url": str(non_empty_environment_value("COMFY_AI_ASSISTANT_API_URL", config.get("api_url", ""))).strip(),
-        "api_key": str(non_empty_environment_value("COMFY_AI_ASSISTANT_API_KEY", config.get("api_key", ""))).strip(),
-        "model": str(non_empty_environment_value("COMFY_AI_ASSISTANT_MODEL", config.get("model", ""))).strip(),
-        "timeout_seconds": int(non_empty_environment_value("COMFY_AI_ASSISTANT_TIMEOUT", config.get("timeout_seconds", 90))),
+        "api_url": str(saved_value_or_environment(config, "api_url", "COMFY_AI_ASSISTANT_API_URL", "")).strip(),
+        "api_key": str(saved_value_or_environment(config, "api_key", "COMFY_AI_ASSISTANT_API_KEY", "")).strip(),
+        "model": str(saved_value_or_environment(config, "model", "COMFY_AI_ASSISTANT_MODEL", "")).strip(),
+        "timeout_seconds": int(saved_value_or_environment(config, "timeout_seconds", "COMFY_AI_ASSISTANT_TIMEOUT", 90)),
         "use_json_mode": bool(use_json_mode),
         "append_chat_completions": append_chat_completions,
         "allow_parameter_tuning": allow_parameter_tuning,

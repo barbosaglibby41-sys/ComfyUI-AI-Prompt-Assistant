@@ -127,7 +127,30 @@ const MAPPING_ROLES = [
 ];
 
 const CHAT_SESSION_STORAGE_KEY = "aipa.agent-session.v1";
+const PANEL_SIZE_STORAGE_KEY = "aipa.panel-size.v1";
+const PANEL_MIN_WIDTH = 320;
+const PANEL_MIN_HEIGHT = 360;
 const INITIAL_AGENT_MESSAGE = "我是你的创作 Agent。可以持续和我讨论灵感、角色、构图与修改方向；确定方案后，我会把它交给当前工作流。";
+
+function restorePanelSize() {
+    try {
+        const saved = JSON.parse(window.localStorage.getItem(PANEL_SIZE_STORAGE_KEY) || "null");
+        const width = Number(saved?.width);
+        const height = Number(saved?.height);
+        if (Number.isFinite(width) && Number.isFinite(height)) return { width, height };
+    } catch {
+        // A damaged saved preference should not prevent the panel from opening.
+    }
+    return null;
+}
+
+function persistPanelSize(size) {
+    try {
+        window.localStorage.setItem(PANEL_SIZE_STORAGE_KEY, JSON.stringify(size));
+    } catch {
+        // The panel remains resizable when browser storage is unavailable.
+    }
+}
 
 function chatSessionId() {
     if (window.crypto?.randomUUID) return window.crypto.randomUUID();
@@ -866,6 +889,18 @@ function buildPanel() {
     const minimize = el("button", { className: "aipa-icon-button", type: "button", textContent: "−", title: "收起窗口", ariaLabel: "收起窗口" });
     const headerActions = el("div", { className: "aipa-header-actions" }, [newChatButton, chatExpandButton, settingsButton, minimize]);
     header.append(title, headerActions);
+    const resizeHandle = el("button", {
+        className: "aipa-resize-handle",
+        type: "button",
+        title: "窗口边框可拖拽调整大小；方向键微调；Home 恢复默认",
+        ariaLabel: "调整悬浮窗大小。可用方向键微调，按 Home 恢复默认大小",
+        ariaKeyShortcuts: "ArrowUp ArrowDown ArrowLeft ArrowRight Home",
+    });
+    const resizeBorders = ["n", "e", "s", "w", "ne", "nw", "se", "sw"].map((direction) => {
+        const border = el("div", { className: `aipa-resize-border aipa-resize-border-${direction}`, ariaHidden: "true" });
+        border.dataset.direction = direction;
+        return border;
+    });
     const tabs = el("div", { className: "aipa-tabs", role: "tablist" });
     const chatTab = el("button", { className: "aipa-tab", type: "button", textContent: "AI 对话", role: "tab", ariaLabel: "打开 AI 对话" });
     const plannerTab = el("button", { className: "aipa-tab", type: "button", textContent: "提示词规划", role: "tab" });
@@ -1001,7 +1036,7 @@ function buildPanel() {
     body.append(statusHost);
 
     body.append(chat, planner, reviewer, settings);
-    root.append(header, tabs, body);
+    root.append(header, tabs, body, ...resizeBorders, resizeHandle);
     document.body.append(root);
     const launcher = el("button", { className: "aipa-launcher", type: "button", textContent: "AI", title: "打开 AI Prompt Assistant", ariaLabel: "打开 AI Prompt Assistant" });
     document.body.append(launcher);
@@ -1639,6 +1674,31 @@ function buildPanel() {
         }
     };
 
+    const savedPanelSize = restorePanelSize();
+    function clampPanelSize(width, height) {
+        return {
+            width: Math.round(Math.min(Math.max(PANEL_MIN_WIDTH, width), Math.max(PANEL_MIN_WIDTH, window.innerWidth - 16))),
+            height: Math.round(Math.min(Math.max(PANEL_MIN_HEIGHT, height), Math.max(PANEL_MIN_HEIGHT, window.innerHeight - 16))),
+        };
+    }
+
+    function applyPanelSize(size) {
+        const next = clampPanelSize(size.width, size.height);
+        root.style.width = `${next.width}px`;
+        root.style.height = `${next.height}px`;
+        root.style.maxHeight = "none";
+        return next;
+    }
+
+    function resetPanelSize() {
+        root.style.removeProperty("width");
+        root.style.removeProperty("height");
+        root.style.removeProperty("max-height");
+        try { window.localStorage.removeItem(PANEL_SIZE_STORAGE_KEY); } catch { /* no-op */ }
+    }
+
+    if (savedPanelSize) applyPanelSize(savedPanelSize);
+
     let drag;
     header.onpointerdown = (event) => {
         // Header actions remain clickable; only the empty title area starts a drag.
@@ -1655,7 +1715,87 @@ function buildPanel() {
         root.style.bottom = "auto";
     };
     header.onpointerup = () => { drag = null; };
-    window.addEventListener("resize", update);
+
+    let resize;
+    function startResize(event, direction) {
+        event.preventDefault();
+        event.stopPropagation();
+        const rect = root.getBoundingClientRect();
+        resize = {
+            pointerId: event.pointerId,
+            direction,
+            startX: event.clientX,
+            startY: event.clientY,
+            width: rect.width,
+            height: rect.height,
+            left: rect.left,
+            top: rect.top,
+        };
+        root.classList.add("is-resizing");
+        event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    function resizePanel(event) {
+        if (!resize || event.pointerId !== resize.pointerId) return;
+        const deltaX = event.clientX - resize.startX;
+        const deltaY = event.clientY - resize.startY;
+        let width = resize.width;
+        let height = resize.height;
+        if (resize.direction.includes("e")) width += deltaX;
+        if (resize.direction.includes("w")) width -= deltaX;
+        if (resize.direction.includes("s")) height += deltaY;
+        if (resize.direction.includes("n")) height -= deltaY;
+        const size = applyPanelSize({ width, height });
+        const left = resize.direction.includes("w") ? resize.left + resize.width - size.width : resize.left;
+        const top = resize.direction.includes("n") ? resize.top + resize.height - size.height : resize.top;
+        root.style.left = `${Math.max(8, Math.min(left, window.innerWidth - size.width - 8))}px`;
+        root.style.top = `${Math.max(8, Math.min(top, window.innerHeight - size.height - 8))}px`;
+        root.style.right = "auto";
+        root.style.bottom = "auto";
+    }
+    function finishResize(event) {
+        if (!resize || (event && event.pointerId !== resize.pointerId)) return;
+        const rect = root.getBoundingClientRect();
+        persistPanelSize(clampPanelSize(rect.width, rect.height));
+        root.classList.remove("is-resizing");
+        resize = null;
+    }
+    for (const border of resizeBorders) {
+        border.onpointerdown = (event) => startResize(event, border.dataset.direction);
+        border.onpointermove = resizePanel;
+        border.onpointerup = finishResize;
+        border.onpointercancel = finishResize;
+    }
+    resizeHandle.onpointerdown = (event) => startResize(event, "se");
+    resizeHandle.onpointermove = resizePanel;
+    resizeHandle.onpointerup = finishResize;
+    resizeHandle.onpointercancel = finishResize;
+    resizeHandle.onkeydown = (event) => {
+        if (event.key === "Home") {
+            event.preventDefault();
+            resetPanelSize();
+            setStatus("success", "已恢复悬浮窗默认大小。");
+            update();
+            return;
+        }
+        const step = event.shiftKey ? 48 : 16;
+        const rect = root.getBoundingClientRect();
+        let width = rect.width;
+        let height = rect.height;
+        if (event.key === "ArrowRight") width += step;
+        else if (event.key === "ArrowLeft") width -= step;
+        else if (event.key === "ArrowDown") height += step;
+        else if (event.key === "ArrowUp") height -= step;
+        else return;
+        event.preventDefault();
+        persistPanelSize(applyPanelSize({ width, height }));
+    };
+    window.addEventListener("resize", () => {
+        if (root.style.width && root.style.height) {
+            const rect = root.getBoundingClientRect();
+            persistPanelSize(applyPanelSize({ width: rect.width, height: rect.height }));
+        }
+        update();
+    });
     restoreManualMapping();
     syncFormatFromNode(plannerFormat, mappingNode("planner"));
     syncFormatFromNode(reviewerFormat, mappingNode("reviewer"));

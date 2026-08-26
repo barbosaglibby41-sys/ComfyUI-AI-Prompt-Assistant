@@ -28,6 +28,21 @@
     box-shadow: 0 18px 45px rgba(0, 0, 0, .42);
     overflow: hidden;
 }
+.aipa-panel.is-resizing, .aipa-panel.is-resizing * { user-select: none; }
+.aipa-resize-border { position: absolute; z-index: 20; touch-action: none; }
+.aipa-resize-border-n, .aipa-resize-border-s { right: 8px; left: 8px; height: 8px; cursor: ns-resize; }
+.aipa-resize-border-n { top: -4px; }
+.aipa-resize-border-s { bottom: -4px; }
+.aipa-resize-border-e, .aipa-resize-border-w { top: 8px; bottom: 8px; width: 8px; cursor: ew-resize; }
+.aipa-resize-border-e { right: -4px; }
+.aipa-resize-border-w { left: -4px; }
+.aipa-resize-border-ne, .aipa-resize-border-sw, .aipa-resize-border-nw, .aipa-resize-border-se { width: 14px; height: 14px; }
+.aipa-resize-border-ne { top: -4px; right: -4px; cursor: nesw-resize; }
+.aipa-resize-border-sw { bottom: -4px; left: -4px; cursor: nesw-resize; }
+.aipa-resize-border-nw { top: -4px; left: -4px; cursor: nwse-resize; }
+.aipa-resize-border-se { right: -4px; bottom: -4px; cursor: nwse-resize; }
+.aipa-resize-handle { position: absolute; z-index: 21; right: 0; bottom: 0; width: 20px; height: 20px; margin: 0; padding: 0; border: 0; border-radius: 0; opacity: 0; cursor: nwse-resize; touch-action: none; }
+.aipa-resize-handle:focus-visible { opacity: 1; outline: 2px solid var(--aipa-accent); outline-offset: -3px; background: var(--aipa-surface-2); }
 
 .aipa-panel.is-collapsed { display: none; }
 .aipa-launcher { display: none; }
@@ -238,10 +253,11 @@
     box-sizing: border-box;
     padding: 24px clamp(20px, 5vw, 56px) 20px;
 }
-.aipa-panel.is-chat-expanded .aipa-chat-workspace { display: grid; min-height: 0; width: 100%; height: 100%; grid-template-columns: minmax(154px, 190px) minmax(0, 1fr); gap: 22px; }
-.aipa-panel.is-chat-expanded .aipa-chat-sessions { min-height: 0; padding: 0 12px 0 0; border-right: 1px solid var(--aipa-line); border-bottom: 0; overflow: hidden; }
-.aipa-panel.is-chat-expanded .aipa-chat-session-list { display: grid; max-height: calc(100vh - 136px); gap: 7px; overflow-y: auto; overflow-x: hidden; }
-.aipa-panel.is-chat-expanded .aipa-chat-session { width: 100%; min-width: 0; }
+.aipa-panel.is-chat-expanded .aipa-chat-workspace { display: grid; min-height: 0; width: 100%; height: 100%; grid-template-columns: minmax(116px, 136px) minmax(0, 1fr); gap: 16px; }
+.aipa-panel.is-chat-expanded .aipa-chat-sessions { min-height: 0; padding: 0 10px 0 0; border-right: 1px solid var(--aipa-line); border-bottom: 0; overflow: hidden; }
+.aipa-panel.is-chat-expanded .aipa-chat-session-list { display: grid; max-height: calc(100vh - 136px); gap: 5px; overflow-y: auto; overflow-x: hidden; }
+.aipa-panel.is-chat-expanded .aipa-chat-session { width: 100%; min-width: 0; min-height: 46px; padding: 7px; }
+.aipa-panel.is-chat-expanded .aipa-chat-session small { margin-top: 3px; }
 .aipa-panel.is-chat-expanded .aipa-chat-main { display: flex; min-height: 0; flex-direction: column; }
 .aipa-panel.is-chat-expanded .aipa-chat-intro { flex: 0 0 auto; margin-bottom: 16px; padding: 13px 15px; }
 .aipa-panel.is-chat-expanded .aipa-chat-intro strong { font-size: 15px; }
@@ -267,6 +283,7 @@
 .aipa-panel.is-chat-expanded .aipa-chat-plan-actions { flex: 0 0 auto; margin-top: 8px; }
 
 @media (max-width: 600px) {
+    .aipa-resize-border, .aipa-resize-handle { display: none; }
     .aipa-panel.is-chat-expanded { top: 8px; right: 8px; width: calc(100vw - 16px); height: calc(100vh - 16px); }
     .aipa-panel.is-chat-expanded .aipa-chat-view { padding: 16px 12px 12px; }
     .aipa-panel.is-chat-expanded .aipa-chat-workspace { grid-template-columns: 1fr; gap: 10px; }
