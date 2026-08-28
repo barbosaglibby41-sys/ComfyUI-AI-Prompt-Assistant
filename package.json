@@ -1,0 +1,12 @@
+{
+  "name": "comfyui-ai-prompt-assistant-ui",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.9"
+  }
+}

@@ -17,6 +17,10 @@ This extension adds two nodes under `AI Prompt Assistant`:
 
 图片评审会将图片压缩为最大边 1024px 的 JPEG 后发送，以降低网关超时风险；评审请求会使用普通提示词请求的两倍超时（最多 300 秒）。插件默认直连 API 地址。只有服务商确实需要代理时，才在设置页打开“通过系统代理访问 AI 服务”。
 
+AI 服务请求遇到连接异常、超时或 `408/429/5xx` 等可恢复的上游错误时，会在首次请求后自动重试 5 次，并使用递增等待；鉴权失败、地址错误和其他不可恢复的 `4xx` 不会重复请求。最终仍失败时，错误提示会说明已经完成自动重试。
+
+图片反推页还支持本地 `WD-EVA02-large-tagger-v3` 标签器。将 Hugging Face 仓库中的 `model.onnx` 和 `selected_tags.csv` 放在同一目录，在设置中填写该目录路径（也可以直接填写 `model.onnx` 路径）并保存。反推页选择“WD-EVA02 标签器（本地）”后会直接在本机生成英文标签，不调用远程 API；选择“英文自然语言”时会自动使用已配置的视觉 AI 模型。当前 ComfyUI 内置 Python 环境已包含 `onnxruntime` 时即可运行，首次使用会加载模型并缓存。
+
 Alternatively set these environment variables before starting ComfyUI:
 
 ```powershell
@@ -69,6 +73,16 @@ When image review is enabled, the reviewer returns an overall score out of 100, 
 
 聊天输入区可以点击 `上传图片` 附加 PNG、JPG、WEBP 或 GIF 图片（最大 8 MB）。填写你的要求后点击 `发送给 AI`，或直接点击 `反推提示词`，让支持视觉输入的大模型根据参考图整理主体、构图、镜头、光线、色彩和风格。图片只会在本次发送时上传至你在设置页配置的 AI 服务，不会写入工作流或浏览器对话存储；请不要上传不愿发送给该服务的私密图片。
 
+## 漫画模式
+
+在 `AI 对话` 页打开“开启漫画模式”后，悬浮窗会立即切换到 `漫画模式`。只需写下一个想法并选择 1-12 张，AI 会一次性给出中文的角色设定、统一画风规则、连续分镜说明，以及每一格可直接用于生图的英文正向提示词。所有分镜提示词都可以在开始前手动修改。
+
+点击“开始逐张生成”后，插件会依序把当前分镜写入已映射的正向 `CLIP Text Encode` 节点，再提交完整工作流；固定反向提示词、模型、采样器、调度器、步数、CFG 和画幅不会被漫画模式修改。生成期间可暂停后续分镜，已提交的一张会继续完成。完成的图片会在漫画页统一展示。
+
+漫画页的“AI 看图续写”默认关闭。开启后，每张成图完成时，插件会把该图压缩后发送给当前设置的视觉模型 API，并让它结合真实画面、角色设定、视觉规则和下一格剧情优化下一格的英文正向提示词。它只会修改下一格的正向提示词与连续性说明，不会修改固定反向提示词或任何出图参数。若续写请求失败，插件会提示原因并使用原分镜提示词继续，不会中断已经规划好的漫画。不要在不接受发送给该 API 服务的图片上开启此选项。
+
+漫画工作流末端必须保留 `Save Image` 或 `Preview Image`，以便插件接收每一格的图片；未收到图片时会停止并提示，而不会继续排队。为确保每格使用对应的分镜提示词，漫画运行时会暂时跳过 `AI Prompt Planner` 节点，并在结束、暂停或报错后自动恢复该节点原本状态。请避免同时手动提交其他工作流任务。
+
 ## Workflow
 
 The floating panel is the recommended entry point. It does not require searching the node menu first:
@@ -86,6 +100,10 @@ The floating panel is the recommended entry point. It does not require searching
 ## Workflow mapping
 
 The floating assistant scans the current canvas and suggests mappings for positive prompt, negative prompt, sampler, latent size, and a connectable `IMAGE` source. It prioritizes decoded image outputs that are already feeding Save Image or Preview Image. `连接成图并评审` is the only action that changes a graph link; it connects the selected image source to the reviewer and can replace an existing image link on that reviewer.
+
+## Frontend build
+
+The ComfyUI extension continues to load `web/` directly, so a normal installation has no Node.js runtime dependency. For a minified production artifact, run `npm install` and `npm run build`; the verified output is written to `dist/web/`.
 
 Each mapping can be selected manually and located on the canvas. Manual choices are stored in the workflow's `extra.aiPromptAssistantMapping` metadata. Use `重新识别` to discard manual choices and scan the current workflow again.
 

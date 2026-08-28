@@ -82,10 +82,9 @@
 .aipa-title strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .aipa-title small { margin-top: 2px; color: var(--aipa-muted); font-size: 11px; }
 .aipa-mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 6px; background: var(--aipa-accent); color: var(--aipa-accent-ink); font: 700 11px "JetBrains Mono", monospace; }
-.aipa-header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-.aipa-icon-button.aipa-new-chat-button { width: 48px; padding: 0; font-size: 11px; white-space: nowrap; }
-.aipa-icon-button.aipa-chat-expand-button { width: 64px; padding: 0; font-size: 11px; white-space: nowrap; }
-.aipa-icon-button.aipa-settings-button { width: 42px; padding: 0; font-size: 11px; white-space: nowrap; }
+.aipa-header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.aipa-icon-button.aipa-new-chat-button, .aipa-icon-button.aipa-chat-expand-button { width: 32px; padding: 0; font-size: 18px; white-space: nowrap; }
+.aipa-icon-button.aipa-settings-button { width: 38px; padding: 0; font-size: 10px; white-space: nowrap; }
 .aipa-icon-button { width: 32px; height: 32px; color: var(--aipa-muted); background: transparent; border: 1px solid transparent; border-radius: 5px; font-size: 20px; cursor: pointer; }
 .aipa-icon-button:hover, .aipa-icon-button:focus-visible { color: var(--aipa-text); border-color: var(--aipa-line); outline: none; }
 .aipa-tabs { display: flex; gap: 4px; padding: 10px 12px 0; background: var(--aipa-bg); }
@@ -107,13 +106,14 @@
 .aipa-settings-heading small { margin-top: 4px; color: var(--aipa-muted); font-size: 11px; line-height: 1.4; }
 .aipa-back-button { flex: 0 0 auto; min-height: 32px; padding: 0 10px; border-radius: 5px; font-size: 11px; cursor: pointer; }
 .aipa-settings-model-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
-.aipa-settings-model-control input { min-width: 0; }
+.aipa-settings-model-control :is(input, select) { min-width: 0; }
 .aipa-settings-model-control button { min-height: 36px; padding: 0 10px; border-radius: 5px; font-size: 11px; cursor: pointer; white-space: nowrap; }
 .aipa-settings-model-control button:disabled, .aipa-settings-view .aipa-primary:disabled { opacity: .6; cursor: wait; }
 .aipa-settings-error, .aipa-settings-status { min-height: 16px; margin: 8px 0 0; font-size: 11px; line-height: 1.45; }
 .aipa-settings-error { color: #ff8c8c; }
 .aipa-settings-status { color: var(--aipa-muted); }
 .aipa-settings-status[data-kind="working"] { color: #f4c95d; }
+.aipa-settings-status[data-kind="success"] { color: #58d98f; }
 .aipa-settings-view .aipa-actions { margin-top: 12px; }
 .aipa-field { display: block; margin-bottom: 12px; }
 .aipa-label { display: block; margin: 0 0 6px; color: var(--aipa-muted); font-size: 11px; }
@@ -143,6 +143,28 @@
 .aipa-chat-intro { margin-bottom: 9px; padding: 9px 10px; border: 1px solid rgba(85, 216, 139, .42); border-radius: 6px; background: rgba(85, 216, 139, .08); }
 .aipa-chat-intro strong { display: block; color: var(--aipa-text); font-size: 12px; }
 .aipa-chat-intro p { margin: 4px 0 0; color: var(--aipa-muted); font-size: 11px; line-height: 1.45; }
+.aipa-agent-brief { margin: 10px 0 12px; padding: 11px; border: 1px solid var(--aipa-line); border-radius: 6px; background: rgba(32, 45, 67, .42); transition: border-color 180ms ease, background 180ms ease; }
+.aipa-agent-brief.is-empty { border-style: dashed; background: rgba(32, 45, 67, .26); }
+.aipa-agent-brief.is-waiting { border-color: rgba(244, 201, 93, .5); }
+.aipa-agent-brief.is-ready { border-color: rgba(85, 216, 139, .62); background: rgba(85, 216, 139, .07); }
+.aipa-agent-brief-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.aipa-agent-brief-kicker { color: var(--aipa-muted); font: 600 10px "JetBrains Mono", monospace; text-transform: uppercase; }
+.aipa-agent-brief-state { flex: 0 0 auto; padding: 3px 6px; border: 1px solid var(--aipa-line); border-radius: 4px; color: var(--aipa-muted); font-size: 10px; white-space: nowrap; }
+.aipa-agent-brief.is-waiting .aipa-agent-brief-state { border-color: rgba(244, 201, 93, .48); color: #f4c95d; }
+.aipa-agent-brief.is-ready .aipa-agent-brief-state { border-color: rgba(85, 216, 139, .5); color: var(--aipa-accent); }
+.aipa-agent-brief-title { display: block; margin-top: 8px; color: var(--aipa-text); font-size: 13px; line-height: 1.35; }
+.aipa-agent-brief-summary { margin: 5px 0 0; color: var(--aipa-muted); font-size: 11px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.aipa-agent-brief-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.aipa-agent-meta-pill { padding: 3px 6px; border: 1px solid var(--aipa-line); border-radius: 4px; color: var(--aipa-muted); background: var(--aipa-surface); font-size: 10px; line-height: 1.25; }
+.aipa-agent-brief-list { display: grid; gap: 4px; margin: 10px 0 0; padding: 0; list-style: none; }
+.aipa-agent-brief-list li { position: relative; padding-left: 12px; color: var(--aipa-text); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+.aipa-agent-brief-list li::before { position: absolute; top: .54em; left: 0; width: 5px; height: 5px; border-radius: 50%; background: var(--aipa-accent); content: ""; }
+.aipa-agent-question { margin-top: 10px; padding: 8px 9px; border-left: 3px solid #f4c95d; background: rgba(244, 201, 93, .08); }
+.aipa-agent-question strong { display: block; color: #f4c95d; font-size: 10px; }
+.aipa-agent-question p { margin: 4px 0 0; color: var(--aipa-text); font-size: 11px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.aipa-agent-brief-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); margin-top: 11px; }
+.aipa-agent-brief-actions button { min-width: 0; padding: 0 8px; }
+.aipa-agent-brief-actions[hidden], .aipa-agent-brief-list[hidden], .aipa-agent-question[hidden] { display: none !important; }
 .aipa-chat-messages { display: grid; gap: 8px; min-height: 118px; max-height: 238px; margin-bottom: 9px; padding: 2px 2px 2px 0; overflow-y: auto; overscroll-behavior: contain; scroll-behavior: smooth; }
 .aipa-chat-message { max-width: 94%; padding: 9px 10px; border: 1px solid var(--aipa-line); border-radius: 6px; background: var(--aipa-surface); }
 .aipa-chat-message.is-user { justify-self: end; border-color: rgba(85, 216, 139, .45); background: rgba(85, 216, 139, .12); }
@@ -159,8 +181,6 @@
 .aipa-suggestion { min-height: 32px; padding: 7px 9px; border: 1px solid var(--aipa-line); border-radius: 5px; color: var(--aipa-muted); background: rgba(32, 45, 67, .46); font: 11px/1.35 "IBM Plex Sans", "Segoe UI", sans-serif; text-align: left; cursor: pointer; }
 .aipa-suggestion:hover, .aipa-suggestion:focus-visible { border-color: var(--aipa-accent); color: var(--aipa-text); outline: 2px solid rgba(85, 216, 139, .22); outline-offset: 1px; }
 .aipa-chat-actions { margin-top: 0; }
-.aipa-chat-plan-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-.aipa-chat-plan-actions button { min-width: 0; padding: 0 8px; }
 .aipa-chat-attachment-bar { display: flex; align-items: center; min-height: 32px; gap: 6px; margin: -4px 0 8px; }
 .aipa-image-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .aipa-attachment-button, .aipa-reverse-button { flex: 0 0 auto; min-height: 32px; padding: 0 9px; border-radius: 5px; font-size: 11px; cursor: pointer; }
@@ -234,6 +254,57 @@
 .aipa-score-fill { display: block; height: 100%; border-radius: inherit; transition: width 180ms ease-out; }
 .aipa-score-number { color: var(--aipa-muted); font: 11px "JetBrains Mono", monospace; text-align: right; }
 
+.aipa-comic-view { padding-top: 12px; }
+.aipa-comic-intro { margin-bottom: 12px; padding: 10px 11px; border-left: 3px solid var(--aipa-accent); background: rgba(85, 216, 139, .08); }
+.aipa-comic-intro strong { display: block; color: var(--aipa-text); font-size: 13px; }
+.aipa-comic-intro p { margin: 4px 0 0; color: var(--aipa-muted); font-size: 11px; line-height: 1.45; }
+.aipa-comic-format, .aipa-comic-progress { min-height: 17px; margin: -2px 0 11px; color: var(--aipa-muted); font-size: 11px; line-height: 1.45; }
+.aipa-comic-progress { margin-top: 12px; color: var(--aipa-accent); }
+.aipa-comic-toggle { margin: -2px 0 2px; }
+.aipa-comic-continuation-hint { margin: 0 0 11px 25px; color: var(--aipa-muted); font-size: 10px; line-height: 1.4; }
+.aipa-comic-continuation-warning { margin: 0 0 10px; color: #ffb0b0; font-size: 11px; line-height: 1.45; }
+.aipa-comic-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.aipa-comic-actions button { min-width: 0; padding: 0 8px; }
+.aipa-comic-history { margin: 0 0 14px; padding: 10px; border: 1px solid var(--aipa-line); border-radius: 5px; background: rgba(32, 45, 67, .22); }
+.aipa-comic-history-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.aipa-comic-history-heading strong { display: block; color: var(--aipa-text); font-size: 12px; }
+.aipa-comic-history-heading small { display: block; margin-top: 3px; color: var(--aipa-muted); font-size: 10px; }
+.aipa-comic-new { min-height: 30px !important; padding: 0 10px !important; font-size: 11px !important; }
+.aipa-comic-history-list { display: grid; gap: 5px; }
+.aipa-comic-history-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px; min-width: 0; }
+.aipa-comic-history-item { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; min-width: 0; min-height: 36px; padding: 5px 8px; border: 1px solid transparent; border-radius: 4px; color: var(--aipa-text); background: var(--aipa-surface); text-align: left; cursor: pointer; }
+.aipa-comic-history-item:hover, .aipa-comic-history-item:focus-visible { border-color: var(--aipa-accent); outline: none; }
+.aipa-comic-history-item.is-active { border-color: rgba(85, 216, 139, .6); background: rgba(85, 216, 139, .08); }
+.aipa-comic-history-item strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.aipa-comic-history-item span, .aipa-comic-history-item small { color: var(--aipa-muted); font-size: 10px; white-space: nowrap; }
+.aipa-comic-history-delete { min-height: 30px; padding: 0 7px; border: 1px solid var(--aipa-line); border-radius: 4px; color: var(--aipa-muted); background: transparent; font-size: 10px; cursor: pointer; }
+.aipa-comic-history-delete:hover, .aipa-comic-history-delete:focus-visible { color: #ffb0b0; border-color: #bd6268; outline: none; }
+.aipa-comic-plan { margin-top: 10px; }
+.aipa-comic-overview { padding-bottom: 12px; border-bottom: 1px solid var(--aipa-line); }
+.aipa-comic-overview h3, .aipa-comic-gallery h3 { margin: 0; color: var(--aipa-text); font-size: 13px; }
+.aipa-comic-overview > p { margin: 5px 0 10px; color: var(--aipa-muted); font-size: 11px; line-height: 1.45; }
+.aipa-comic-bible { display: grid; gap: 4px; padding: 9px 10px; border: 1px solid var(--aipa-line); border-radius: 5px; background: rgba(32, 45, 67, .46); }
+.aipa-comic-bible strong { margin-top: 2px; color: var(--aipa-accent); font-size: 11px; }
+.aipa-comic-bible p { margin: 0 0 4px; color: var(--aipa-text); font-size: 11px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.aipa-comic-panel-list { display: grid; gap: 8px; margin-top: 10px; }
+.aipa-comic-panel-item { padding: 10px; border: 1px solid var(--aipa-line); border-radius: 5px; background: rgba(32, 45, 67, .3); }
+.aipa-comic-panel-item.is-rendering { border-color: var(--aipa-accent); box-shadow: inset 3px 0 0 var(--aipa-accent); }
+.aipa-comic-panel-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.aipa-comic-panel-heading strong { color: var(--aipa-text); font-size: 12px; }
+.aipa-comic-panel-heading span { min-width: 0; color: var(--aipa-muted); font-size: 10px; text-align: right; overflow-wrap: anywhere; }
+.aipa-comic-panel-item > p { margin: 6px 0 4px; color: var(--aipa-text); font-size: 11px; line-height: 1.45; }
+.aipa-comic-panel-item > small { display: block; margin-bottom: 8px; color: var(--aipa-muted); font-size: 10px; line-height: 1.4; }
+.aipa-comic-panel-item > .aipa-comic-continuity-note { color: #c8f7da; }
+.aipa-comic-panel-item .aipa-field { margin: 0; }
+.aipa-comic-panel-item textarea { min-height: 66px; font-size: 11px; }
+.aipa-comic-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--aipa-line); }
+.aipa-comic-gallery h3 { grid-column: 1 / -1; margin-bottom: 1px; }
+.aipa-comic-image-card { min-width: 0; overflow: hidden; border: 1px solid var(--aipa-line); border-radius: 5px; background: var(--aipa-surface); }
+.aipa-comic-image-card img { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; background: var(--aipa-surface-2); }
+.aipa-comic-image-card strong, .aipa-comic-image-card small { display: block; padding: 0 7px; overflow-wrap: anywhere; }
+.aipa-comic-image-card strong { margin-top: 7px; color: var(--aipa-text); font-size: 11px; }
+.aipa-comic-image-card small { margin: 4px 0 7px; color: var(--aipa-muted); font-size: 10px; line-height: 1.35; }
+
 /* Focus mode gives the conversation the same breathing room as a dedicated agent workspace. */
 .aipa-panel.is-chat-expanded {
     top: 12px;
@@ -262,6 +333,11 @@
 .aipa-panel.is-chat-expanded .aipa-chat-intro { flex: 0 0 auto; margin-bottom: 16px; padding: 13px 15px; }
 .aipa-panel.is-chat-expanded .aipa-chat-intro strong { font-size: 15px; }
 .aipa-panel.is-chat-expanded .aipa-chat-intro p { font-size: 12px; }
+.aipa-panel.is-chat-expanded .aipa-agent-brief { flex: 0 0 auto; margin-top: 0; margin-bottom: 16px; padding: 15px 16px; }
+.aipa-panel.is-chat-expanded .aipa-agent-brief-title { font-size: 15px; }
+.aipa-panel.is-chat-expanded .aipa-agent-brief-summary { font-size: 12px; line-height: 1.55; }
+.aipa-panel.is-chat-expanded .aipa-agent-brief-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 16px; }
+.aipa-panel.is-chat-expanded .aipa-agent-brief-actions { max-width: 360px; }
 .aipa-panel.is-chat-expanded .aipa-chat-messages {
     flex: 1 1 auto;
     min-height: 120px;
@@ -280,7 +356,6 @@
 .aipa-panel.is-chat-expanded .aipa-chat-main > .aipa-field textarea { min-height: 76px; max-height: 180px; padding: 12px 13px; font-size: 14px; line-height: 1.5; }
 .aipa-panel.is-chat-expanded .aipa-chat-actions { flex: 0 0 auto; justify-content: flex-end; margin-top: 0; }
 .aipa-panel.is-chat-expanded .aipa-chat-actions .aipa-primary { flex: 0 0 116px; }
-.aipa-panel.is-chat-expanded .aipa-chat-plan-actions { flex: 0 0 auto; margin-top: 8px; }
 
 @media (max-width: 600px) {
     .aipa-resize-border, .aipa-resize-handle { display: none; }
@@ -296,19 +371,19 @@
     .aipa-panel { top: 12px; right: 12px; width: calc(100vw - 24px); max-height: calc(100vh - 24px); }
     .aipa-body { max-height: calc(100vh - 82px); }
     .aipa-chat-messages { max-height: 180px; }
-    .aipa-chat-plan-actions { grid-template-columns: 1fr; }
+    .aipa-agent-brief-actions { grid-template-columns: 1fr; }
     .aipa-score-row { grid-template-columns: minmax(70px, 1fr) minmax(58px, 1.25fr) 24px; gap: 6px; }
     .aipa-workflow-stages { grid-template-columns: 1fr; }
+    .aipa-comic-actions { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 380px) {
     .aipa-header { gap: 6px; padding-right: 8px; padding-left: 10px; }
     .aipa-title { gap: 8px; }
-    .aipa-title strong { max-width: 72px; font-size: 12px; }
+    .aipa-title strong { max-width: none; font-size: 13px; }
     .aipa-title small { display: none; }
     .aipa-header-actions { gap: 4px; }
-    .aipa-icon-button.aipa-new-chat-button { width: 42px; font-size: 10px; }
-    .aipa-icon-button.aipa-chat-expand-button { width: 52px; font-size: 10px; }
+    .aipa-icon-button.aipa-new-chat-button, .aipa-icon-button.aipa-chat-expand-button { width: 30px; font-size: 17px; }
     .aipa-icon-button.aipa-settings-button { width: 38px; font-size: 10px; }
 }
 

@@ -5,5 +5,6 @@
   "timeout_seconds": 90,
   "append_chat_completions": true,
   "allow_parameter_tuning": true,
-  "use_json_mode": true
+  "use_json_mode": true,
+  "wd_tagger_path": ""
 }
